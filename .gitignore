@@ -42,3 +42,6 @@ venv
 # Mac one click installer
 Tesseract-OCR/
 poppler/
+
+# Ignore macOS directory metadata
+.DS_Store
