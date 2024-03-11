@@ -31,6 +31,7 @@ dist
 Dockerfile-runner.dockerfile
 build_info.txt
 prebuilt_deps
+.vscode
 
 ## Added After Fork
 
