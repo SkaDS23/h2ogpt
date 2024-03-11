@@ -32,6 +32,11 @@ Dockerfile-runner.dockerfile
 build_info.txt
 prebuilt_deps
 Dockerfile_deps
+auth.json.lock
+llamacpp_path
+source_dir
+locks
+users
 
 # IDEs
 .idea/
