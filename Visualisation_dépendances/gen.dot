@@ -1,0 +1,59 @@
+
+digraph G {
+    concentrate = true;
+
+    rankdir = TB;
+    node [style=filled,fillcolor="#ffffff",fontcolor="#000000",fontname=Helvetica,fontsize=10];
+
+    gen_py [fillcolor="#635435",fontcolor="#ffffff",label="gen.py"];
+    accelerate [fillcolor="#b65353",fontcolor="#ffffff",shape="folder"];
+    anthropic [fillcolor="#c06a40",fontcolor="#ffffff",shape="folder"];
+    gradio_client [fillcolor="#e6e619",shape="folder"];
+    gradio_utils [fillcolor="#9dce3b",shape="folder"];
+    httpx [fillcolor="#70c247",shape="folder"];
+    huggingface_hub [fillcolor="#2fdb2f",shape="folder"];
+    mistralai [fillcolor="#3bce6c",shape="folder"];
+    numpy [fillcolor="#06f9a8",shape="folder"];
+    openai_server [fillcolor="#53b6b6",shape="folder"];
+    peft [fillcolor="#5395b6",shape="folder"];
+    replicate [fillcolor="#406ac0",fontcolor="#ffffff",shape="folder"];
+    requests [fillcolor="#0b0bd6",fontcolor="#ffffff",shape="folder"];
+    src [fillcolor="#5e10f9",fontcolor="#ffffff",shape="folder"];
+    text_generation [fillcolor="#9d26d9",fontcolor="#ffffff",shape="folder"];
+    torch [fillcolor="#f906f9",fontcolor="#ffffff",shape="folder"];
+    transformers [fillcolor="#f906a8",fontcolor="#ffffff",shape="folder"];
+    urllib3 [fillcolor="#dd185a",fontcolor="#ffffff",shape="folder"];
+    accelerate -> gen_py [fillcolor="#b65353",minlen="2"];
+    anthropic -> gen_py [fillcolor="#c06a40",minlen="2"];
+    gradio_client -> gen_py [fillcolor="#e6e619",minlen="2"];
+    gradio_client -> gradio_utils [fillcolor="#e6e619",minlen="2"];
+    gradio_client -> src [fillcolor="#e6e619",minlen="2"];
+    gradio_utils -> gen_py [fillcolor="#9dce3b",minlen="2"];
+    gradio_utils -> src [fillcolor="#9dce3b",minlen="3"];
+    httpx -> gen_py [fillcolor="#70c247",minlen="2"];
+    httpx -> gradio_client [fillcolor="#70c247",minlen="2"];
+    huggingface_hub -> gen_py [fillcolor="#2fdb2f",minlen="2"];
+    huggingface_hub -> gradio_client [fillcolor="#2fdb2f",minlen="2"];
+    huggingface_hub -> gradio_utils [fillcolor="#2fdb2f",minlen="2"];
+    huggingface_hub -> src [fillcolor="#2fdb2f",minlen="2"];
+    mistralai -> gen_py [fillcolor="#3bce6c",minlen="2"];
+    numpy -> gen_py [fillcolor="#06f9a8",minlen="2"];
+    numpy -> src [fillcolor="#06f9a8",minlen="3"];
+    openai_server -> gen_py [fillcolor="#53b6b6",minlen="2"];
+    peft -> gen_py [fillcolor="#5395b6",minlen="2"];
+    replicate -> gen_py [fillcolor="#406ac0",minlen="2"];
+    requests -> gen_py [fillcolor="#0b0bd6",minlen="2"];
+    requests -> mistralai [fillcolor="#0b0bd6",minlen="2"];
+    requests -> src [fillcolor="#0b0bd6",minlen="2"];
+    requests -> text_generation [fillcolor="#0b0bd6",minlen="2"];
+    src -> gen_py [fillcolor="#5e10f9",minlen="3"];
+    text_generation -> gen_py [fillcolor="#9d26d9",minlen="2"];
+    text_generation -> src [fillcolor="#9d26d9",minlen="2"];
+    torch -> gen_py [fillcolor="#f906f9",minlen="2"];
+    torch -> src [fillcolor="#f906f9",minlen="3"];
+    transformers -> gen_py [fillcolor="#f906a8",minlen="2"];
+    transformers -> src [fillcolor="#f906a8",minlen="2"];
+    urllib3 -> gen_py [fillcolor="#dd185a",minlen="2"];
+    urllib3 -> mistralai [fillcolor="#dd185a",minlen="2"];
+    urllib3 -> requests [fillcolor="#dd185a"];
+}

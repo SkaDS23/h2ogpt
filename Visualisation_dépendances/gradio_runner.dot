@@ -1,0 +1,53 @@
+
+digraph G {
+    concentrate = true;
+
+    rankdir = TB;
+    node [style=filled,fillcolor="#ffffff",fontcolor="#000000",fontname=Helvetica,fontsize=10];
+
+    gradio_runner_py [fillcolor="#4c6335",fontcolor="#ffffff",label="gradio_runner\.\npy"];
+    apscheduler [fillcolor="#c24747",fontcolor="#ffffff",shape="folder"];
+    filelock [fillcolor="#db6f2f",shape="folder"];
+    gradio [fillcolor="#f3b90c",shape="folder"];
+    gradio_pdf [fillcolor="#a9b653",shape="folder"];
+    gradio_utils [fillcolor="#4dce3b",shape="folder"];
+    iterators [fillcolor="#53b66c",shape="folder"];
+    langchain [fillcolor="#24d090",shape="folder"];
+    numpy [fillcolor="#06f9f9",shape="folder"];
+    openai_server [fillcolor="#4794c2",shape="folder"];
+    pandas [fillcolor="#3359cc",fontcolor="#ffffff",shape="folder"];
+    psutil [fillcolor="#4f40c0",fontcolor="#ffffff",shape="folder"];
+    pydantic [fillcolor="#7f26d9",fontcolor="#ffffff",shape="folder"];
+    pydub [fillcolor="#b347c2",fontcolor="#ffffff",shape="folder"];
+    requests [fillcolor="#cc33a6",fontcolor="#ffffff",shape="folder"];
+    src [fillcolor="#f91067",fontcolor="#ffffff",shape="folder"];
+    apscheduler -> gradio_runner_py [fillcolor="#c24747",minlen="3"];
+    filelock -> gradio_runner_py [fillcolor="#db6f2f",minlen="2"];
+    filelock -> gradio_utils [fillcolor="#db6f2f",minlen="2"];
+    filelock -> src [fillcolor="#db6f2f",minlen="2"];
+    gradio -> gradio_pdf [fillcolor="#f3b90c",minlen="2"];
+    gradio -> gradio_runner_py [fillcolor="#f3b90c",minlen="2"];
+    gradio -> gradio_utils [fillcolor="#f3b90c",minlen="2"];
+    gradio -> src [fillcolor="#f3b90c",minlen="2"];
+    gradio_pdf -> gradio_runner_py [fillcolor="#a9b653",minlen="2"];
+    gradio_utils -> gradio_runner_py [fillcolor="#4dce3b",minlen="2"];
+    gradio_utils -> src [fillcolor="#4dce3b",minlen="3"];
+    iterators -> gradio_runner_py [fillcolor="#53b66c",minlen="2"];
+    langchain -> gradio_runner_py [fillcolor="#24d090",minlen="3"];
+    langchain -> src [fillcolor="#24d090",minlen="3"];
+    numpy -> gradio_runner_py [fillcolor="#06f9f9",minlen="2"];
+    numpy -> src [fillcolor="#06f9f9",minlen="3"];
+    openai_server -> gradio_runner_py [fillcolor="#4794c2",minlen="2"];
+    pandas -> gradio_runner_py [fillcolor="#3359cc",minlen="2"];
+    pandas -> src [fillcolor="#3359cc",minlen="2"];
+    psutil -> gradio_runner_py [fillcolor="#4f40c0",minlen="2"];
+    pydantic -> gradio_runner_py [fillcolor="#7f26d9",minlen="2"];
+    pydantic -> openai_server [fillcolor="#7f26d9",minlen="2"];
+    pydantic -> src [fillcolor="#7f26d9",minlen="2"];
+    pydub -> gradio_runner_py [fillcolor="#b347c2",minlen="2"];
+    pydub -> src [fillcolor="#b347c2",minlen="2"];
+    requests -> gradio_runner_py [fillcolor="#cc33a6",minlen="2"];
+    requests -> src [fillcolor="#cc33a6",minlen="2"];
+    src -> gradio_runner_py [fillcolor="#f91067",minlen="3"];
+    src -> gradio_utils [fillcolor="#f91067",minlen="2"];
+}
