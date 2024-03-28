@@ -7,7 +7,6 @@ import datetime
 import filelock
 import gradio as gr
 
-from src.enums import no_server_str
 from src.utils import is_gradio_version4
 
 
@@ -162,6 +161,7 @@ def make_chatbots(output_label0, output_label0_model2, **kwargs):
                                 min_width=min_width,
                                 avatar_images=avatar_images,
                                 likeable=True,
+                                latex_delimiters=[],
                                 show_copy_button=kwargs['show_copy_button'],
                                 visible=kwargs['model_lock'] and (visible_models is None or
                                                                   model_state_locki in visible_models or
@@ -219,6 +219,7 @@ def make_chatbots(output_label0, output_label0_model2, **kwargs):
                                      min_width=min_width,
                                      show_copy_button=kwargs['show_copy_button'],
                                      avatar_images=avatar_images,
+                                     latex_delimiters=[],
                                      )
     with gr.Row():
         text_output = gr.Chatbot(label=output_label0,

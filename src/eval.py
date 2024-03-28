@@ -19,14 +19,19 @@ def run_eval(  # for local function:
         examples=None, memory_restriction_level=None,
         # evaluate kwargs
         n_jobs=None, llamacpp_path=None, llamacpp_dict=None, exllama_dict=None, gptq_dict=None, attention_sinks=None,
-        sink_dict=None, truncation_generation=None, hf_model_dict=None, load_exllama=None,
+        sink_dict=None, truncation_generation=None,
+        hf_model_dict=None,
+        force_seq2seq_type=None, force_t5_type=None,
+        load_exllama=None,
 
         use_pymupdf=None,
         use_unstructured_pdf=None,
         use_pypdf=None,
         enable_pdf_ocr=None,
         enable_pdf_doctr=None,
-        enable_imagegen_high_sd=None,
+        enable_image=None,
+        visible_image_models=None,
+
         try_pdf_as_html=None,
         # for evaluate args beyond what's already above, or things that are always dynamic and locally created
         load_awq='',
@@ -42,6 +47,7 @@ def run_eval(  # for local function:
         repetition_penalty=None,
         num_return_sequences=None,
         do_sample=None,
+        seed=None,
         langchain_mode=None,
         langchain_action=None,
         langchain_agents=[],
@@ -93,9 +99,7 @@ def run_eval(  # for local function:
         doctr_loader=None,
         pix2struct_loader=None,
         llava_model=None,
-        image_gen_loader=None,
-        image_gen_loader_high=None,
-        image_change_loader=None,
+        image_model_dict=None,
 
         asr_model=None,
         asr_loader=None,

@@ -1,4 +1,5 @@
 import copy
+import functools
 import json
 import os
 import types
@@ -55,10 +56,12 @@ class StreamingGradioCallbackHandler(BaseCallbackHandler):
 
     def on_llm_new_token(self, token: str, **kwargs: Any) -> None:
         """Run on new LLM token. Only available when streaming is enabled."""
-        if self.tgen0 is not None and self.max_time is not None and (time.time() - self.tgen0) > self.max_time:
+        if False and \
+        self.tgen0 is not None and self.max_time is not None and (time.time() - self.tgen0) > self.max_time:
             if self.verbose:
                 print("Took too long in StreamingGradioCallbackHandler: %s" % (time.time() - self.tgen0), flush=True)
             self.text_queue.put(self.stop_signal)
+            self.do_stop = True
         else:
             self.text_queue.put(token)
 
@@ -175,6 +178,8 @@ def fix_json_meta(docs1):
 
 
 class H2OMapReduceDocumentsChain(MapReduceDocumentsChain):
+    allow_map_1 = True
+    which = 'map'
     def combine_docs(
             self,
             docs: List[Document],
@@ -198,12 +203,22 @@ class H2OMapReduceDocumentsChain(MapReduceDocumentsChain):
             # This uses metadata from the docs, and the textual results from `results`
             for i, r in enumerate(map_results)
         ]
-        extra_return_dict = {}
-        if self.return_intermediate_steps:
-            intermediate_steps = [r[question_result_key] for r in map_results]
-            extra_return_dict["intermediate_steps"] = intermediate_steps
-        result_docs_content = [x.page_content for x in result_docs]
-        return result_docs_content, extra_return_dict
+        if self.which == 'map' or len(result_docs) == 1 and self.allow_map_1:
+            extra_return_dict = {}
+            if self.return_intermediate_steps:
+                intermediate_steps = [r[question_result_key] for r in map_results]
+                extra_return_dict["intermediate_steps"] = intermediate_steps
+            result = [x.page_content for x in result_docs]
+            if self.which == 'map_reduce':
+                result = result[0]
+        else:
+            result, extra_return_dict = self.reduce_documents_chain.combine_docs(
+                result_docs, token_max=token_max, callbacks=callbacks, **kwargs
+            )
+            if self.return_intermediate_steps:
+                intermediate_steps = [r[question_result_key] for r in map_results]
+                extra_return_dict["intermediate_steps"] = intermediate_steps
+        return result, extra_return_dict
 
     async def acombine_docs(
             self,
@@ -228,12 +243,22 @@ class H2OMapReduceDocumentsChain(MapReduceDocumentsChain):
             # This uses metadata from the docs, and the textual results from `results`
             for i, r in enumerate(map_results)
         ]
-        extra_return_dict = {}
-        if self.return_intermediate_steps:
-            intermediate_steps = [r[question_result_key] for r in map_results]
-            extra_return_dict["intermediate_steps"] = intermediate_steps
-        result_docs_content = [x.page_content for x in result_docs]
-        return result_docs_content, extra_return_dict
+        if self.which == 'map' or len(result_docs) == 1 and self.allow_map_1:
+            extra_return_dict = {}
+            if self.return_intermediate_steps:
+                intermediate_steps = [r[question_result_key] for r in map_results]
+                extra_return_dict["intermediate_steps"] = intermediate_steps
+            result = [x.page_content for x in result_docs]
+            if self.which == 'map_reduce':
+                result = result[0]
+        else:
+            result, extra_return_dict = await self.reduce_documents_chain.acombine_docs(
+                result_docs, token_max=token_max, callbacks=callbacks, **kwargs
+            )
+            if self.return_intermediate_steps:
+                intermediate_steps = [r[question_result_key] for r in map_results]
+                extra_return_dict["intermediate_steps"] = intermediate_steps
+        return result, extra_return_dict
 
     @property
     def _chain_type(self) -> str:
@@ -299,6 +324,7 @@ def _load_map_chain(
         document_variable_name=map_reduce_document_variable_name,
         verbose=verbose,
         callbacks=callbacks,
+        allow_map_1=map_prompt == combine_prompt,
         **kwargs,
     )
 
@@ -323,9 +349,9 @@ def load_general_summarization_chain(
     """
     loader_mapping: Mapping[str, LoadingCallable] = {
         "stuff": _load_stuff_chain,
-        "map_reduce": _load_map_reduce_chain,
+        "map_reduce": functools.partial(_load_map_chain, which='map_reduce'),
         "refine": _load_refine_chain,
-        "map": _load_map_chain,
+        "map": functools.partial(_load_map_chain, which='map'),
     }
     if chain_type not in loader_mapping:
         raise ValueError(
@@ -439,7 +465,7 @@ class H2OHuggingFaceHubEmbeddings(HuggingFaceHubEmbeddings):
         max_tokens = 512
         # should be less than --max-client-batch-size=4096 for launching TEI
         # shoudl also be that max_tokens * 4 * max_batch_size <= 2MB
-        max_batch_size = 1024
+        max_batch_size = int(os.getenv('TEI_MAX_BATCH_SIZE', '1024'))
         verbose = False
 
         texts = [text.replace("\n", " ")[:4 * max_tokens] for text in texts]

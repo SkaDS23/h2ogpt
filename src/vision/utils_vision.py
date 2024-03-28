@@ -1,12 +1,15 @@
 import base64
 import os
 import time
+import types
 import uuid
 from io import BytesIO
 import numpy as np
 
+from src.enums import valid_imagegen_models, valid_imagechange_models, valid_imagestyle_models
 
-def img_to_base64(image_file):
+
+def img_to_base64(image_file, str_bytes=True):
     # assert image_file.lower().endswith('jpg') or image_file.lower().endswith('jpeg')
     from PIL import Image
 
@@ -35,7 +38,10 @@ def img_to_base64(image_file):
     image.save(buffered, format=iformat)
     img_str = base64.b64encode(buffered.getvalue())
     # FIXME: unsure about below
-    img_str = str(bytes("data:image/%s;base64," % iformat.lower(), encoding='utf-8') + img_str)
+    if str_bytes:
+        img_str = str(bytes("data:image/%s;base64," % iformat.lower(), encoding='utf-8') + img_str)
+    else:
+        img_str = f"data:image/{iformat.lower()};base64,{img_str.decode('utf-8')}"
 
     return img_str
 
@@ -56,7 +62,10 @@ def base64_to_img(img_str, output_path):
     return output_file
 
 
-def fix_llava_prompt(file, prompt, allow_prompt_auto=True):
+def fix_llava_prompt(file,
+               prompt=None,
+               allow_prompt_auto=True,
+                     ):
     if prompt in ['auto', None] and allow_prompt_auto:
         prompt = "Describe the image and what does the image say?"
         # prompt = "According to the image, describe the image in full details with a well-structured response."
@@ -73,9 +82,9 @@ def fix_llava_prompt(file, prompt, allow_prompt_auto=True):
 
 
 def llava_prep(file,
-               llava_model,
-               image_model='llava-v1.6-vicuna-13b',
-               client=None):
+                   llava_model,
+                   image_model='llava-v1.6-vicuna-13b',
+                   client=None):
     prefix = ''
     if llava_model.startswith('http://'):
         prefix = 'http://'
@@ -169,7 +178,6 @@ def get_llava_stream(file, llava_model,
                      force_stream=True,  # dummy arg
                      ):
     image_model = os.path.basename(image_model)  # in case passed HF link
-
     prompt = fix_llava_prompt(file, prompt, allow_prompt_auto=allow_prompt_auto)
 
     image_model, client, file = \
@@ -227,3 +235,90 @@ def get_llava_stream(file, llava_model,
     if verbose_level == 1:
         print("total job_outputs_num=%d" % job_outputs_num, flush=True)
     return text
+
+
+def get_image_model_dict(enable_image,
+                         image_models,
+                         image_gpu_ids,
+                         ):
+    image_dict = {}
+    if not enable_image:
+        return image_dict
+
+    if image_gpu_ids is None:
+        image_gpu_ids = ['auto'] * len(image_models)
+
+    for image_model_name in valid_imagegen_models + valid_imagechange_models + valid_imagestyle_models:
+        if image_model_name in image_models:
+            imagegen_index = image_models.index(image_model_name)
+            if image_model_name == 'sdxl_turbo':
+                from src.vision.sdxl import get_pipe_make_image, make_image
+            elif image_model_name == 'playv2':
+                from src.vision.playv2 import get_pipe_make_image, make_image
+            elif image_model_name == 'sdxl':
+                from src.vision.stable_diffusion_xl import get_pipe_make_image, make_image
+            elif image_model_name == 'sdxl_change':
+                from src.vision.sdxl import get_pipe_change_image as get_pipe_make_image, change_image
+                make_image = change_image
+            # FIXME: style
+            else:
+                raise ValueError("Invalid image_model_name=%s" % image_model_name)
+            pipe = get_pipe_make_image(gpu_id=image_gpu_ids[imagegen_index])
+            image_dict[image_model_name] = dict(pipe=pipe, make_image=make_image)
+    return image_dict
+
+
+def pdf_to_base64_pngs(pdf_path, quality=75, max_size=(1024, 1024), ext='png', pages=None):
+    """
+    Define the function to convert a pdf slide deck to a list of images. Note that we need to ensure we resize images to keep them within Claude's size limits.
+    """
+    # https://github.com/anthropics/anthropic-cookbook/blob/main/multimodal/reading_charts_graphs_powerpoints.ipynb
+    from PIL import Image
+    import io
+    import fitz
+    import tempfile
+
+    # Open the PDF file
+    doc = fitz.open(pdf_path)
+
+    # Iterate through each page of the PDF
+    images = []
+    if pages is None:
+        pages = list(range(doc.page_count))
+    else:
+        assert isinstance(pages, (list, tuple, types.GeneratorType))
+
+    for page_num in pages:
+        # Load the page
+        page = doc.load_page(page_num)
+
+        # Render the page as a PNG image
+        pix = page.get_pixmap(matrix=fitz.Matrix(300/72, 300/72))
+
+        # Save the PNG image
+        output_path = f"{tempfile.mkdtemp()}/page_{page_num+1}.{ext}"
+        pix.save(output_path)
+        images.append(output_path)
+    # Close the PDF document
+    doc.close()
+
+    if ext == 'png':
+        iformat = 'PNG'
+    elif ext in ['jpeg', 'jpg']:
+        iformat = 'JPEG'
+    else:
+        raise ValueError("No such ext=%s" % ext)
+
+    images = [Image.open(image) for image in images]
+    base64_encoded_pngs = []
+    for image in images:
+        # Resize the image if it exceeds the maximum size
+        if image.size[0] > max_size[0] or image.size[1] > max_size[1]:
+            image.thumbnail(max_size, Image.Resampling.LANCZOS)
+        image_data = io.BytesIO()
+        image.save(image_data, format=iformat, optimize=True, quality=quality)
+        image_data.seek(0)
+        base64_encoded = base64.b64encode(image_data.getvalue()).decode('utf-8')
+        base64_encoded_pngs.append(base64_encoded)
+
+    return base64_encoded_pngs
