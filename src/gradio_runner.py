@@ -19,6 +19,7 @@ import numpy as np
 import pandas as pd
 import requests
 from iterators import TimeoutIterator
+import json
 
 from gradio_utils.css import get_css
 from gradio_utils.prompt_form import make_chatbots, get_chatbot_name
@@ -603,7 +604,7 @@ def go_gradio(**kwargs):
                 raise RuntimeError("Bad type: %s" % selection_docs_state1[k])
 
     # BEGIN AUTH THINGS
-    def auth_func(username1, password1, auth_pairs=None, auth_filename=None,
+    def auth_func(username1, password1, role1=None, auth_pairs=None, auth_filename=None,
                   auth_access=None,
                   auth_freeze=None,
                   guest_name=None,
@@ -611,6 +612,7 @@ def go_gradio(**kwargs):
                   selection_docs_state00=None,
                   id0=None,
                   **kwargs):
+        #assert role1 in ['user', 'expert', 'admin']
         assert auth_freeze is not None
         if selection_docs_state1 is None:
             selection_docs_state1 = selection_docs_state00
@@ -650,7 +652,7 @@ def go_gradio(**kwargs):
                     return False
             elif username1 in auth_pairs:
                 # copy over CLI auth to file so only one state to manage
-                auth_dict[username1] = dict(password=auth_pairs[username1], userid=id0 or str(uuid.uuid4()))
+                auth_dict[username1] = dict(password=auth_pairs[username1], userid=id0, role = role1 or str(uuid.uuid4()))
                 auth_user = auth_dict[username1]
                 update_auth_selection(auth_user, selection_docs_state1)
                 save_auth_dict(auth_dict, auth_filename)
@@ -659,7 +661,7 @@ def go_gradio(**kwargs):
                 if auth_access == 'closed':
                     return False
                 # open access
-                auth_dict[username1] = dict(password=password1, userid=id0 or str(uuid.uuid4()))
+                auth_dict[username1] = dict(password=password1, userid=id0, role = role1 or str(uuid.uuid4()))
                 auth_user = auth_dict[username1]
                 update_auth_selection(auth_user, selection_docs_state1)
                 save_auth_dict(auth_dict, auth_filename)
@@ -667,7 +669,8 @@ def go_gradio(**kwargs):
                     return True
                 else:
                     raise RuntimeError("Invalid auth_access: %s" % auth_access)
-
+                
+            
     def auth_func_open(*args, **kwargs):
         return True
 
@@ -699,8 +702,31 @@ def go_gradio(**kwargs):
                                         auth_access=kwargs['auth_access'],
                                         guest_name=kwargs['guest_name'],
                                         )
+    def get_user_role_auth_func(requests_state1, auth_filename=None, auth_access=None, guest_name=None, role0=None,
+                             **kwargs):
+        username1 = get_username(requests_state1)
+        if auth_filename and isinstance(auth_filename, str):
+            if username1:
+                if username1.startswith(guest_name):
+                    return str(uuid.uuid4())
+                with filelock.FileLock(auth_filename + '.lock'):
+                    if os.path.isfile(auth_filename):
+                        with open(auth_filename, 'rt') as f:
+                            auth_dict = json.load(f)
+                        if username1 in auth_dict:
+                            return auth_dict[username1]['role']
+        # if here, then not persistently associated with username1,
+        # but should only be one-time asked if going to persist within a single session!
+        return role0 or username1 or str(uuid.uuid4())
+    
+    get_user_role_auth = functools.partial(get_user_role_auth_func,
+                                        auth_filename=kwargs['auth_filename'],
+                                        auth_access=kwargs['auth_access'],
+                                        guest_name=kwargs['guest_name'],
+                                        )
+    
     if kwargs['auth_access'] == 'closed':
-        auth_message1 = "Closed access"
+        auth_message1 = "Veuillez saisir vos identifiants"
     else:
         auth_message1 = "WELCOME to %s!  Open access" \
                         " (%s/%s or any unique user/pass)" % (page_title, kwargs['guest_name'], kwargs['guest_name'])
@@ -827,7 +853,14 @@ def go_gradio(**kwargs):
         have_vision_models = kwargs['inference_server'].startswith('http') and is_vision_model(kwargs['base_model'])
 
     is_gradio_h2oai = get_is_gradio_h2oai()
+    
+    def read_auth_file(auth_file):
+        with open(auth_file, 'r') as file:
+            data = json.load(file)
+        
+            return data
 
+<<<<<<< Updated upstream
     # image control prep
     image_gen_visible = kwargs['enable_imagegen']
     image_change_visible = kwargs['enable_imagechange']
@@ -846,6 +879,9 @@ def go_gradio(**kwargs):
                                        )
 
     with demo:
+=======
+    with demo:        
+>>>>>>> Stashed changes
         support_state_callbacks = hasattr(gr.State(), 'callback')
 
         # avoid actual model/tokenizer here or anything that would be bad to deepcopy
@@ -2354,6 +2390,7 @@ def go_gradio(**kwargs):
                         value="#### Login page to persist your state (database, documents, chat, chat history, model list)%s" % extra_login)
                     username_text = gr.Textbox(label="Username")
                     password_text = gr.Textbox(label="Password", type='password', visible=True)
+                    role_dropdown = gr.Dropdown(choices=["user","expert","admin"], label="Role")
                     login_msg = "Login (pick unique user/pass to persist your state)" if kwargs[
                                                                                              'auth_access'] == 'open' else "Login (closed access)"
                     login_btn = gr.Button(value=login_msg)
@@ -2881,14 +2918,21 @@ def go_gradio(**kwargs):
 
         def login(db1s, selection_docs_state1, requests_state1, roles_state1,
                   model_options_state1, lora_options_state1, server_options_state1,
+<<<<<<< Updated upstream
                   chat_state1, langchain_mode1,
                   h2ogpt_key2, visible_models1,
                   username1, password1,
+=======
+                  chat_state1,
+                  langchain_mode1,
+                  username1, password1,role1,
+>>>>>>> Stashed changes
                   text_output1, text_output21, *text_outputs1,
-                  auth_filename=None, num_model_lock=0, pre_authorized=False):
+                  auth_filename=None, num_model_lock=0, pre_authorized=False, **kwargs):
             # use full auth login to allow new users if open access etc.
             if pre_authorized:
                 username1 = requests_state1.get('username')
+<<<<<<< Updated upstream
                 password1 = username1
                 authorized1 = True
             else:
@@ -2899,6 +2943,14 @@ def go_gradio(**kwargs):
                                 id0=get_userid_direct(db1s))
             authorized1 += authorized2
 
+=======
+                password1 = None
+                role1 = None
+                authorized1 = True
+            else:
+                authorized1 = authf(username1, password1, role1, selection_docs_state1=selection_docs_state1,
+                                    id0=get_userid_direct(db1s))
+>>>>>>> Stashed changes
             if authorized1:
                 if not isinstance(requests_state1, dict):
                     requests_state1 = {}
@@ -2916,10 +2968,15 @@ def go_gradio(**kwargs):
                               lora_options_state1=lora_options_state1,
                               server_options_state1=server_options_state1,
                               chat_state1=chat_state1, langchain_mode1=langchain_mode1,
+<<<<<<< Updated upstream
                               h2ogpt_key2=h2ogpt_key2, visible_models1=visible_models1,
                               text_output1=text_output1, text_output21=text_output21,
                               text_outputs1=text_outputs1,
                               username_override=username1, password_to_check=password1,
+=======
+                              text_output1=text_output1, text_output21=text_output21, text_outputs1=text_outputs1,
+                              username_override=username1, password_to_check=password1, role_to_check= role1,
+>>>>>>> Stashed changes
                               num_model_lock=num_model_lock)
             else:
                 success1 = False
@@ -2931,12 +2988,16 @@ def go_gradio(**kwargs):
                 # still pre-login if both are same hash
                 label_instruction1 = 'Ask or Ingest'
             else:
+<<<<<<< Updated upstream
                 username = requests_state1['username']
                 if username and split_google in username:
                     real_name = split_google.join(username.split(split_google)[0:1])
                 else:
                     real_name = username
                 label_instruction1 = 'Ask or Ingest, %s' % real_name
+=======
+                label_instruction1 = 'Ask or Ingest, %s' % requests_state1['username']          
+>>>>>>> Stashed changes
             return db1s, selection_docs_state1, requests_state1, roles_state1, \
                 model_options_state1, lora_options_state1, server_options_state1, \
                 chat_state1, \
@@ -2963,9 +3024,15 @@ def go_gradio(**kwargs):
         # get_client() in openai server backend.py needs updating if login_inputs changes
         login_inputs = [my_db_state, selection_docs_state, requests_state, roles_state,
                         model_options_state, lora_options_state, server_options_state,
+<<<<<<< Updated upstream
                         chat_state, langchain_mode,
                         h2ogpt_key, visible_models,
                         username_text, password_text,
+=======
+                        chat_state,
+                        langchain_mode,
+                        username_text, password_text, role_dropdown,
+>>>>>>> Stashed changes
                         text_output, text_output2] + text_outputs
         login_outputs = [my_db_state, selection_docs_state, requests_state, roles_state,
                          model_options_state, lora_options_state, server_options_state,
@@ -2993,10 +3060,15 @@ def go_gradio(**kwargs):
                       lora_options_state1=None,
                       server_options_state1=None,
                       chat_state1=None, langchain_mode1=None,
+<<<<<<< Updated upstream
                       h2ogpt_key2=None, visible_models1=None,
                       text_output1=None, text_output21=None,
                       text_outputs1=None,
                       username_override=None, password_to_check=None,
+=======
+                      text_output1=None, text_output21=None, text_outputs1=None,
+                      username_override=None, password_to_check=None, role_to_check = None,
+>>>>>>> Stashed changes
                       num_model_lock=None):
             # in-place assignment
             if not auth_filename:
@@ -3063,6 +3135,10 @@ def go_gradio(**kwargs):
                                 visible_models1 = auth_user['visible_models']
                             text_result = "Successful login for %s" % get_show_username(username1)
                             success1 = True
+                            if auth_user['role'] == "admin":
+                                kwargs["visible_expert_tab"] = False
+                            elif auth_user['role'] == "expert":
+                                kwargs["visible_side_bar"] = False
                         else:
                             text_result = "No user %s" % get_show_username(username1)
                 else:
@@ -6285,7 +6361,7 @@ def go_gradio(**kwargs):
                 load_event7 = load_event6.then(**viewable_kwargs)
 
     demo.queue(**queue_kwargs, api_open=kwargs['api_open'])
-    favicon_file = "h2o-logo.svg"
+    favicon_file = "wevioo.png"
     favicon_path = kwargs['favicon_path'] or favicon_file
     if not os.path.isfile(favicon_file):
         print("favicon_path1=%s not found" % favicon_file, flush=True)
@@ -6342,6 +6418,7 @@ def go_gradio(**kwargs):
     allowed_paths += [os.path.abspath(x) for x in kwargs['extra_allowed_paths']]
     blocked_paths = [os.path.abspath(x) for x in kwargs['blocked_paths']]
 
+<<<<<<< Updated upstream
     max_threads = max(128, 4 * kwargs['concurrency_count']) if isinstance(kwargs['concurrency_count'],
                                                                           int) else 128
 
@@ -6392,6 +6469,26 @@ def go_gradio(**kwargs):
                     blocked_paths=blocked_paths if blocked_paths else None,
                     )
 
+=======
+    demo.launch(share=kwargs['share'],
+                server_name=kwargs['server_name'],
+                show_error=True,
+                server_port=server_port,
+                favicon_path=favicon_path,
+                prevent_thread_lock=True,
+                auth=authf,
+                auth_message=auth_message,
+                root_path=kwargs['root_path'],
+                ssl_keyfile=kwargs['ssl_keyfile'],
+                ssl_verify=kwargs['ssl_verify'],
+                ssl_certfile=kwargs['ssl_certfile'],
+                ssl_keyfile_password=kwargs['ssl_keyfile_password'],
+                max_threads=max(128, 4 * kwargs['concurrency_count']) if isinstance(kwargs['concurrency_count'],
+                                                                                    int) else 128,
+                allowed_paths=allowed_paths if allowed_paths else None,
+                blocked_paths=blocked_paths if blocked_paths else None,
+                )
+>>>>>>> Stashed changes
     showed_server_name = 'localhost' if kwargs['server_name'] == "0.0.0.0" else kwargs['server_name']
     if kwargs['verbose'] or not (kwargs['base_model'] in ['gptj', 'gpt4all_llama']):
         print("Started Gradio Server and/or GUI: server_name: %s port: %s" % (showed_server_name,
