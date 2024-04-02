@@ -224,7 +224,7 @@ def ask_block(kwargs, instruction_label, visible_upload, file_types, mic_sources
                     size="sm",
                     min_width=mw0,
                     file_types=['.' + x for x in file_types],
-                    file_count="multiple",
+                    file_count="directory",
                     visible=visible_upload)
                 add_button = gr.Button(
                     elem_id="add-button" if visible_upload and not kwargs[
@@ -602,15 +602,24 @@ def go_gradio(**kwargs):
             else:
                 raise RuntimeError("Bad type: %s" % selection_docs_state1[k])
 
+    #MongoDB Data Base Instance
+    
+    from pymongo import MongoClient
+
+    client = MongoClient('mongodb://localhost:27017/')  
+    db = client['h2ogpt'] 
+    collection = db['Users'] 
+    
     # BEGIN AUTH THINGS
+    
     def auth_func(username1, password1, auth_pairs=None, auth_filename=None,
-                  auth_access=None,
-                  auth_freeze=None,
-                  guest_name=None,
-                  selection_docs_state1=None,
-                  selection_docs_state00=None,
-                  id0=None,
-                  **kwargs):
+              auth_access=None,
+              auth_freeze=None,
+              guest_name=None,
+              selection_docs_state1=None,
+              selection_docs_state00=None,
+              id0=None,
+              **kwargs):
         assert auth_freeze is not None
         if selection_docs_state1 is None:
             selection_docs_state1 = selection_docs_state00
@@ -622,51 +631,33 @@ def go_gradio(**kwargs):
         if username1 == '':
             # some issue with login
             return False
-        with filelock.FileLock(auth_filename + '.lock'):
-            auth_dict = {}
-            if os.path.isfile(auth_filename):
-                try:
-                    with open(auth_filename, 'rt') as f:
-                        auth_dict = json.load(f)
-                except json.decoder.JSONDecodeError as e:
-                    print("Auth exception: %s" % str(e), flush=True)
-                    shutil.move(auth_filename, auth_filename + '.bak' + str(uuid.uuid4()))
-                    auth_dict = {}
-            if username1 in auth_dict and username1 in auth_pairs:
-                if password1 == auth_dict[username1]['password'] and password1 == auth_pairs[username1]:
-                    auth_user = auth_dict[username1]
-                    update_auth_selection(auth_user, selection_docs_state1)
-                    save_auth_dict(auth_dict, auth_filename)
-                    return True
-                else:
-                    return False
-            elif username1 in auth_dict:
-                if password1 == auth_dict[username1]['password']:
-                    auth_user = auth_dict[username1]
-                    update_auth_selection(auth_user, selection_docs_state1)
-                    save_auth_dict(auth_dict, auth_filename)
-                    return True
-                else:
-                    return False
-            elif username1 in auth_pairs:
-                # copy over CLI auth to file so only one state to manage
-                auth_dict[username1] = dict(password=auth_pairs[username1], userid=id0 or str(uuid.uuid4()))
-                auth_user = auth_dict[username1]
-                update_auth_selection(auth_user, selection_docs_state1)
-                save_auth_dict(auth_dict, auth_filename)
+        
+        # Query MongoDB to find the user
+        user_data = collection.find_one({'username': username1})
+        
+        if user_data:
+            if password1 == user_data['password']:
+                # Update authentication selection
+                update_auth_selection(user_data, selection_docs_state1)
+                # Save user data back to MongoDB
+                collection.update_one({'_id': user_data['_id']}, {'$set': user_data})
                 return True
             else:
-                if auth_access == 'closed':
-                    return False
-                # open access
-                auth_dict[username1] = dict(password=password1, userid=id0 or str(uuid.uuid4()))
-                auth_user = auth_dict[username1]
-                update_auth_selection(auth_user, selection_docs_state1)
-                save_auth_dict(auth_dict, auth_filename)
-                if auth_access == 'open':
-                    return True
-                else:
-                    raise RuntimeError("Invalid auth_access: %s" % auth_access)
+                return False
+        else:
+            if auth_access == 'closed':
+                return False
+            # open access
+            auth_dict = {
+                'username': username1,
+                'password': password1,
+                'userid': id0 or str(uuid.uuid4())
+            }
+            # Insert new user data into MongoDB
+            collection.insert_one(auth_dict)
+            # Update authentication selection
+            update_auth_selection(auth_dict, selection_docs_state1)
+            return True
 
     def auth_func_open(*args, **kwargs):
         return True
@@ -678,18 +669,16 @@ def go_gradio(**kwargs):
         return username1
 
     def get_userid_auth_func(requests_state1, auth_filename=None, auth_access=None, guest_name=None, id0=None,
-                             **kwargs):
+                         **kwargs):
         username1 = get_username(requests_state1)
         if auth_filename and isinstance(auth_filename, str):
             if username1:
                 if username1.startswith(guest_name):
                     return str(uuid.uuid4())
-                with filelock.FileLock(auth_filename + '.lock'):
-                    if os.path.isfile(auth_filename):
-                        with open(auth_filename, 'rt') as f:
-                            auth_dict = json.load(f)
-                        if username1 in auth_dict:
-                            return auth_dict[username1]['userid']
+                # Query MongoDB to find the user
+                user_data = collection.find_one({'username': username1})
+                if user_data:
+                    return user_data['userid']
         # if here, then not persistently associated with username1,
         # but should only be one-time asked if going to persist within a single session!
         return id0 or username1 or str(uuid.uuid4())
@@ -2988,85 +2977,86 @@ def go_gradio(**kwargs):
             .then(close_admin, inputs=admin_pass_textbox, outputs=admin_row, **noqueue_kwargs)
 
         def load_auth(db1s, requests_state1, auth_filename=None, selection_docs_state1=None,
-                      roles_state1=None,
-                      model_options_state1=None,
-                      lora_options_state1=None,
-                      server_options_state1=None,
-                      chat_state1=None, langchain_mode1=None,
-                      h2ogpt_key2=None, visible_models1=None,
-                      text_output1=None, text_output21=None,
-                      text_outputs1=None,
-                      username_override=None, password_to_check=None,
-                      num_model_lock=None):
+              roles_state1=None,
+              model_options_state1=None,
+              lora_options_state1=None,
+              server_options_state1=None,
+              chat_state1=None, langchain_mode1=None,
+              h2ogpt_key2=None, visible_models1=None,
+              text_output1=None, text_output21=None,
+              text_outputs1=None,
+              username_override=None, password_to_check=None,
+              num_model_lock=None):
+    
             # in-place assignment
             if not auth_filename:
                 return False, "No auth file", text_output1, text_output21, text_outputs1, \
                     langchain_mode1, h2ogpt_key2, visible_models1
+            
             # if first time here, need to set userID
             set_userid_gr(db1s, requests_state1, get_userid_auth)
+            
             if username_override:
                 username1 = username_override
             else:
                 username1 = get_username(requests_state1)
+            
             success1 = False
-            with filelock.FileLock(auth_filename + '.lock'):
-                if os.path.isfile(auth_filename):
-                    with open(auth_filename, 'rt') as f:
-                        auth_dict = json.load(f)
-                        if username1 in auth_dict:
-                            auth_user = auth_dict[username1]
-                            if password_to_check:
-                                if auth_user['password'] != password_to_check:
-                                    return False, "Invalid password for user %s" % username1, \
-                                        text_output1, text_output21, text_outputs1, \
-                                        langchain_mode1, h2ogpt_key2, visible_models1
-                            if username_override:
-                                # then use original user id
-                                set_userid_direct_gr(db1s, auth_dict[username1]['userid'], username1)
-                            if 'selection_docs_state' in auth_user:
-                                update_auth_selection(auth_user, selection_docs_state1)
-                            if 'roles_state' in auth_user:
-                                roles_state1.update(auth_user['roles_state'])
-                            if 'model_options_state' in auth_user and \
-                                    model_options_state1 and \
-                                    auth_user['model_options_state']:
-                                model_options_state1[0].extend(auth_user['model_options_state'][0])
-                                model_options_state1[0] = [x for x in model_options_state1[0] if
-                                                           x != no_model_str and x]
-                                model_options_state1[0] = [no_model_str] + sorted(set(model_options_state1[0]))
-                            if 'lora_options_state' in auth_user and \
-                                    lora_options_state1 and \
-                                    auth_user['lora_options_state']:
-                                lora_options_state1[0].extend(auth_user['lora_options_state'][0])
-                                lora_options_state1[0] = [x for x in lora_options_state1[0] if x != no_lora_str and x]
-                                lora_options_state1[0] = [no_lora_str] + sorted(set(lora_options_state1[0]))
-                            if 'server_options_state' in auth_user and \
-                                    server_options_state1 and \
-                                    auth_user['server_options_state']:
-                                server_options_state1[0].extend(auth_user['server_options_state'][0])
-                                server_options_state1[0] = [x for x in server_options_state1[0] if
-                                                            x != no_server_str and x]
-                                server_options_state1[0] = [no_server_str] + sorted(set(server_options_state1[0]))
-                            if 'chat_state' in auth_user:
-                                chat_state1.update(auth_user['chat_state'])
-                            if 'text_output' in auth_user:
-                                text_output1 = auth_user['text_output']
-                            if 'text_output2' in auth_user:
-                                text_output21 = auth_user['text_output2']
-                            if 'text_outputs' in auth_user:
-                                text_outputs1 = auth_user['text_outputs']
-                            if 'langchain_mode' in auth_user:
-                                langchain_mode1 = auth_user['langchain_mode']
-                            if 'h2ogpt_key' in auth_user:
-                                h2ogpt_key2 = auth_user['h2ogpt_key']
-                            if 'visible_models' in auth_user:
-                                visible_models1 = auth_user['visible_models']
-                            text_result = "Successful login for %s" % get_show_username(username1)
-                            success1 = True
-                        else:
-                            text_result = "No user %s" % get_show_username(username1)
-                else:
-                    text_result = "No auth file"
+            
+            user_data = collection.find_one({'username': username1})
+            
+            if user_data:
+                if password_to_check and user_data['password'] != password_to_check:
+                    return False, "Invalid password for user %s" % username1, \
+                        text_output1, text_output21, text_outputs1, \
+                        langchain_mode1, h2ogpt_key2, visible_models1
+                
+                if 'userid' in user_data:
+                    set_userid_direct_gr(db1s, user_data['userid'], username1)
+                    
+                if 'selection_docs_state' in user_data:
+                    update_auth_selection(user_data, selection_docs_state1)
+                if 'roles_state' in user_data:
+                    roles_state1.update(user_data['roles_state'])
+                if 'model_options_state' in user_data and \
+                        model_options_state1 and \
+                        user_data['model_options_state']:
+                    model_options_state1[0].extend(user_data['model_options_state'][0])
+                    model_options_state1[0] = [x for x in model_options_state1[0] if
+                                            x != no_model_str and x]
+                    model_options_state1[0] = [no_model_str] + sorted(set(model_options_state1[0]))
+                if 'lora_options_state' in user_data and \
+                        lora_options_state1 and \
+                        user_data['lora_options_state']:
+                    lora_options_state1[0].extend(user_data['lora_options_state'][0])
+                    lora_options_state1[0] = [x for x in lora_options_state1[0] if x != no_lora_str and x]
+                    lora_options_state1[0] = [no_lora_str] + sorted(set(lora_options_state1[0]))
+                if 'server_options_state' in user_data and \
+                        server_options_state1 and \
+                        user_data['server_options_state']:
+                    server_options_state1[0].extend(user_data['server_options_state'][0])
+                    server_options_state1[0] = [x for x in server_options_state1[0] if
+                                                x != no_server_str and x]
+                    server_options_state1[0] = [no_server_str] + sorted(set(server_options_state1[0]))
+                if 'chat_state' in user_data:
+                    chat_state1.update(user_data['chat_state'])
+                if 'text_output' in user_data:
+                    text_output1 = user_data['text_output']
+                if 'text_output2' in user_data:
+                    text_output21 = user_data['text_output2']
+                if 'text_outputs' in user_data:
+                    text_outputs1 = user_data['text_outputs']
+                if 'langchain_mode' in user_data:
+                    langchain_mode1 = user_data['langchain_mode']
+                if 'h2ogpt_key' in user_data:
+                    h2ogpt_key2 = user_data['h2ogpt_key']
+                if 'visible_models' in user_data:
+                    visible_models1 = user_data['visible_models']
+                text_result = "Successful login for %s" % get_show_username(username1)
+                success1 = True
+            else:
+                text_result = "No user %s" % get_show_username(username1)
+                
             if num_model_lock is not None:
                 if len(text_outputs1) > num_model_lock:
                     text_outputs1 = text_outputs1[:num_model_lock]
@@ -3074,6 +3064,7 @@ def go_gradio(**kwargs):
                     text_outputs1 = text_outputs1 + [[]] * (num_model_lock - len(text_outputs1))
             else:
                 text_outputs1 = []
+            
             # ensure when load, even if unused, that has good state.  Can't be [[]]
             if text_output1 is None:
                 text_output1 = []
@@ -3088,75 +3079,83 @@ def go_gradio(**kwargs):
                     text_outputs1[i] = []
                 if not text_outputs1[i] and len(text_outputs1[i]) > 0 and not text_outputs1[i][0]:
                     text_outputs1[i] = []
+            
             return success1, text_result, text_output1, text_output21, text_outputs1, \
-                langchain_mode1, h2ogpt_key2, visible_models1,
+                langchain_mode1, h2ogpt_key2, visible_models1
 
         def save_auth_dict(auth_dict, auth_filename):
             backup_file = auth_filename + '.bak' + str(uuid.uuid4())
-            if os.path.isfile(auth_filename):
-                shutil.copy(auth_filename, backup_file)
+            
+            # Copy existing data to a backup file
+            if collection.count_documents({}) > 0:
+                collection.insert_one({'backup_file': backup_file, 'auth_dict': collection.find_one()})
+            
+            # Save auth_dict to MongoDB
             try:
-                with open(auth_filename, 'wt') as f:
-                    f.write(json.dumps(auth_dict, indent=2))
-                remove(backup_file)
-            except BaseException as e:
-                print("Failure to save auth %s, restored backup: %s: %s" % (auth_filename, backup_file, str(e)),
-                      flush=True)
-                shutil.copy(backup_file, auth_dict)
-                if os.getenv('HARD_ASSERTS'):
-                    # unexpected in testing or normally
-                    raise
+                collection.delete_many({})
+                collection.insert_one(auth_dict)
+            except Exception as e:
+                print("Failure to save auth %s, restored backup: %s: %s" % (auth_filename, backup_file, str(e)), flush=True)
+                # Rollback to the backup data
+                backup_data = collection.find_one({'backup_file': backup_file})
+                if backup_data:
+                    collection.delete_many({})
+                    collection.insert_one(backup_data['auth_dict'])
+                else:
+                    print("No backup found to restore.", flush=True)
+            
+            # Remove the backup file entry from MongoDB
+            collection.delete_many({'backup_file': backup_file})
 
         def save_auth(selection_docs_state1, requests_state1, roles_state1,
-                      model_options_state1, lora_options_state1, server_options_state1,
-                      chat_state1, langchain_mode1,
-                      h2ogpt_key1, visible_models1,
-                      text_output1, text_output21,
-                      text_outputs1,
-                      auth_filename=None, auth_access=None, auth_freeze=None, guest_name=None,
-                      ):
+              model_options_state1, lora_options_state1, server_options_state1,
+              chat_state1, langchain_mode1,
+              h2ogpt_key1, visible_models1,
+              text_output1, text_output21,
+              text_outputs1,
+              auth_filename=None, auth_access=None, auth_freeze=None, guest_name=None):
             if auth_freeze:
                 return
             if not auth_filename:
                 return
-            # save to auth file
+            
+            # Save to MongoDB
             username1 = get_username(requests_state1)
-            with filelock.FileLock(auth_filename + '.lock'):
-                if os.path.isfile(auth_filename):
-                    with open(auth_filename, 'rt') as f:
-                        auth_dict = json.load(f)
-                    if username1 in auth_dict:
-                        auth_user = auth_dict[username1]
-                        if selection_docs_state1:
-                            update_auth_selection(auth_user, selection_docs_state1, save=True)
-                        if roles_state1:
-                            # overwrite
-                            auth_user['roles_state'] = roles_state1
-                        if model_options_state1:
-                            # overwrite
-                            auth_user['model_options_state'] = model_options_state1
-                        if lora_options_state1:
-                            # overwrite
-                            auth_user['lora_options_state'] = lora_options_state1
-                        if server_options_state1:
-                            # overwrite
-                            auth_user['server_options_state'] = server_options_state1
-                        if chat_state1:
-                            # overwrite
-                            auth_user['chat_state'] = chat_state1
-                        if text_output1:
-                            auth_user['text_output'] = text_output1
-                        if text_output21:
-                            auth_user['text_output2'] = text_output21
-                        if text_outputs1:
-                            auth_user['text_outputs'] = text_outputs1
-                        if langchain_mode1:
-                            auth_user['langchain_mode'] = langchain_mode1
-                        if h2ogpt_key1:
-                            auth_user['h2ogpt_key'] = h2ogpt_key1
-                        if visible_models1:
-                            auth_user['visible_models'] = visible_models1
-                        save_auth_dict(auth_dict, auth_filename)
+            auth_user = collection.find_one({'username': username1})
+            
+            if not auth_user:
+                auth_user = {
+                    'username': username1,
+                    'selection_docs_state': selection_docs_state1,
+                    'roles_state': roles_state1,
+                    'model_options_state': model_options_state1,
+                    'lora_options_state': lora_options_state1,
+                    'server_options_state': server_options_state1,
+                    'chat_state': chat_state1,
+                    'text_output': text_output1,
+                    'text_output2': text_output21,
+                    'text_outputs': text_outputs1,
+                    'langchain_mode': langchain_mode1,
+                    'h2ogpt_key': h2ogpt_key1,
+                    'visible_models': visible_models1
+                }
+                collection.insert_one(auth_user)
+            else:
+                update_data = {
+                    'selection_docs_state': selection_docs_state1,
+                    'roles_state': roles_state1,
+                    'model_options_state': model_options_state1,
+                    'lora_options_state': lora_options_state1,
+                    'server_options_state': server_options_state1,
+                    'chat_state': chat_state1,
+                    'text_output': text_output1,
+                    'text_output2': text_output21,
+                    'text_outputs': text_outputs1,
+                    'langchain_mode': langchain_mode1,
+                    'h2ogpt_key': h2ogpt_key1,
+                    'visible_models': visible_models1
+                }
+                collection.update_one({'username': username1}, {'$set': update_data})
 
         def save_auth_wrap(*args, **kwargs):
             save_auth(args[0], args[1], args[2],
