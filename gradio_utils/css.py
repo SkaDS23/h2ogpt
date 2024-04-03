@@ -112,7 +112,7 @@ def make_css_base(select_string) -> str:
     #add-button {
         position: absolute;
         top: 14px;
-        right: 75px;
+        right: 210px;
         
         display: flex;
         justify-content: center;
@@ -130,7 +130,21 @@ def make_css_base(select_string) -> str:
     #attach-button {
         position: absolute;
         top: 14px;
-        right: 20px;
+        right: 120px;
+        
+        display: flex;
+        justify-content: center;
+        border: 1px solid var(--primary-500) !important;
+        
+        @media (max-width: 563px) {
+          width: 40px;
+        }
+    }
+
+    #attach-button2 {
+        position: absolute;
+        top: 14px;
+        right: 10px;
         
         display: flex;
         justify-content: center;
@@ -141,7 +155,7 @@ def make_css_base(select_string) -> str:
         }
     }
     
-    #attach-button > img {
+    #attach-button2 > img {
         margin-right: 40;
     }
     

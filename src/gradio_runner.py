@@ -200,7 +200,7 @@ def ask_block(kwargs, instruction_label, visible_upload, file_types, mic_sources
               submit_kwargs, stop_kwargs):
     with gr.Row():
         with gr.Column(scale=50):
-            with gr.Row(elem_id="prompt-form-row"):
+            with gr.Row(elem_id="prompt-form-row", equal_height=True):
                 label_instruction = 'Ask or Ingest'
                 instruction = gr.Textbox(
                     lines=kwargs['input_lines'],
@@ -217,14 +217,24 @@ def ask_block(kwargs, instruction_label, visible_upload, file_types, mic_sources
                     size="sm",
                     min_width=mw0,
                     visible=kwargs['enable_stt'])
-                attach_button = gr.UploadButton(
-                    elem_id="attach-button" if visible_upload else None,
+                attach_button_directory = gr.UploadButton(
+                    elem_id="attach-button2" if visible_upload else None,
                     value=None,
-                    label="Upload",
+                    label="Upload directory",
                     size="sm",
                     min_width=mw0,
                     file_types=['.' + x for x in file_types],
                     file_count="directory",
+                    scale=0,
+                    visible=visible_upload)
+                attach_button = gr.UploadButton(
+                    elem_id="attach-button" if visible_upload else None,
+                    value=None,
+                    label="Upload file(s)",
+                    size="sm",
+                    min_width=mw0,
+                    file_types=['.' + x for x in file_types],
+                    file_count="multiple",
                     visible=visible_upload)
                 add_button = gr.Button(
                     elem_id="add-button" if visible_upload and not kwargs[
@@ -340,7 +350,7 @@ def ask_block(kwargs, instruction_label, visible_upload, file_types, mic_sources
                     .then(fn=lambda: None, **submit_kwargs)
                 stop_text.change(fn=clear_audio_state, outputs=audio_state) \
                     .then(fn=lambda: None, **stop_kwargs)
-    return attach_button, add_button, submit_buttons, instruction, submit, retry_btn, undo, clear_chat_btn, save_chat_btn, stop_btn
+    return attach_button, attach_button_directory, add_button, submit_buttons, instruction, submit, retry_btn, undo, clear_chat_btn, save_chat_btn, stop_btn
 
 
 def go_gradio(**kwargs):
@@ -1266,7 +1276,7 @@ def go_gradio(**kwargs):
                         col_chat = gr.Column(visible=kwargs['chat'])
                         with col_chat:
                             if kwargs['visible_ask_anything_high']:
-                                attach_button, add_button, submit_buttons, instruction, submit, retry_btn, undo, clear_chat_btn, save_chat_btn, stop_btn = \
+                                attach_button, attach_button_directory, add_button, submit_buttons, instruction, submit, retry_btn, undo, clear_chat_btn, save_chat_btn, stop_btn = \
                                     ask_block(kwargs, instruction_label, visible_upload, file_types, mic_sources_kwargs,
                                               mic_kwargs, noqueue_kwargs2, submit_kwargs, stop_kwargs)
                             visible_model_choice = bool(kwargs['model_lock']) and \
@@ -1301,7 +1311,7 @@ def go_gradio(**kwargs):
                                                                                     **kwargs)
 
                             if not kwargs['visible_ask_anything_high']:
-                                attach_button, add_button, submit_buttons, instruction, submit, retry_btn, undo, clear_chat_btn, save_chat_btn, stop_btn = \
+                                attach_button, attach_button_directory, add_button, submit_buttons, instruction, submit, retry_btn, undo, clear_chat_btn, save_chat_btn, stop_btn = \
                                     ask_block(kwargs, instruction_label, visible_upload, file_types, mic_sources_kwargs,
                                               mic_kwargs, noqueue_kwargs2, submit_kwargs, stop_kwargs)
                             with gr.Row():
@@ -2480,6 +2490,13 @@ def go_gradio(**kwargs):
         attach_file_kwargs['outputs'][0] = attach_button
         attach_file_kwargs['api_name'] = 'attach_file'
         event_attach2 = event_attach1.then(**attach_file_kwargs, show_progress='full')
+        
+        event_attach_directory = attach_button_directory.upload(**user_state_kwargs)
+        attach_file_kwargs = add_file_kwargs.copy()
+        attach_file_kwargs['inputs'][0] = attach_button_directory
+        attach_file_kwargs['outputs'][0] = attach_button_directory
+        attach_file_kwargs['api_name'] = 'attach_file'
+        event_attach_directory1 = event_attach_directory.then(**attach_file_kwargs, show_progress='full')
 
         sync1 = sync_sources_btn.click(**user_state_kwargs)
 
@@ -2577,7 +2594,7 @@ def go_gradio(**kwargs):
                      eventdb2a, eventdb2,
                      eventdb2a_btn, eventdb2_btn,
                      eventdb3a, eventdb3]
-        db_events.extend([event_attach1, event_attach2])
+        db_events.extend([event_attach1, event_attach2, event_attach_directory1])
 
         get_sources1 = functools.partial(get_sources_gr, dbs=dbs, docs_state0=docs_state0,
                                          load_db_if_exists=load_db_if_exists,
@@ -3731,8 +3748,20 @@ def go_gradio(**kwargs):
             event_attach5 = event_attach4.then(**show_sources_kwargs)
             event_attach6 = event_attach5.then(**get_viewable_sources_args)
             event_attach7 = event_attach6.then(**viewable_kwargs)
+            
             if kwargs['gradio_upload_to_chatbot']:
                 event_attach8 = event_attach7.then(**update_chatbots_kwargs)
+            
+            # attach directory
+            
+            event_attach_dir = event_attach_directory1.then(**get_sources_kwargs)
+            event_attach_dir1 = event_attach_dir.then(fn=update_dropdown, inputs=docs_state, outputs=document_choice)
+            event_attach_dir2 = event_attach_dir1.then(**show_sources_kwargs)
+            event_attach_dir3 = event_attach_dir2.then(**get_viewable_sources_args)
+            event_attach_dir4 = event_attach_dir3.then(**viewable_kwargs)
+            
+            if kwargs['gradio_upload_to_chatbot']:
+                event_attach_dir5 = event_attach_dir4.then(**update_chatbots_kwargs)
 
             sync2 = sync1.then(**get_sources_kwargs)
             sync3 = sync2.then(fn=update_dropdown, inputs=docs_state, outputs=document_choice)
@@ -6379,7 +6408,7 @@ def go_gradio(**kwargs):
                     show_error=True,
                     favicon_path=favicon_path,
                     prevent_thread_lock=True,
-                    auth=auth,
+                    auth=authf,
                     auth_message=auth_message,
                     root_path=kwargs['root_path'],
                     ssl_keyfile=kwargs['ssl_keyfile'],
