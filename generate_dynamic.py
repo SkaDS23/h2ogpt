@@ -14,9 +14,9 @@ def get_parameters_from_mongodb():
 
 def entrypoint_main():
     parameters_document = get_parameters_from_mongodb()
-    parameters = {}  # Initialize parameters dictionary
+    parameters = {}  
     if parameters_document:
-        parameters = parameters_document  # Assign retrieved parameters
+        parameters = parameters_document  
 
     main(**parameters)
 

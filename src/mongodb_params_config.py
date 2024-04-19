@@ -22,7 +22,15 @@ parameters = {
     'early_stopping': None,
     'max_time': None,
     'max_seq_len' : None,
-    'max_output_seq_len' : None
+    'max_output_seq_len' : None,
+    "hyde_level" : 0,
+    "pre_prompt_query" : "Test Query for testing database",
+    "prompt_query" : None,
+    "pre_prompt_summary" : None,
+    "prompt_summary" : None,
+    "hyde_llm_prompt" : None,
+    "prompt_type" : None,
+    "system_prompt" : None,
 }
 
 store_parameters_in_mongodb(parameters)

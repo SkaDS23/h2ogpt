@@ -69,13 +69,13 @@ from enums import DocumentSubset, LangChainMode, no_lora_str, model_token_mappin
     user_prompt_for_fake_system_prompt, base_langchain_actions, google_mapping, google_mapping_outputs, generic_prefix, \
     generic_postfix, mistralai_mapping, mistralai_mapping_outputs, langchain_modes_intrinsic, valid_imagechange_models, \
     valid_imagegen_models, valid_imagestyle_models, groq_mapping, \
-    groq_mapping_outputs
+    groq_mapping_outputs, llava_num_max
 from loaders import get_loaders
 from utils import set_seed, clear_torch_cache, NullContext, wrapped_partial, EThread, get_githash, \
     import_matplotlib, get_device, makedirs, get_kwargs, start_faulthandler, get_hf_server, FakeTokenizer, \
     have_langchain, set_openai, cuda_vis_check, H2O_Fire, lg_to_gr, str_to_list, str_to_dict, get_token_count, \
     url_alive, have_wavio, have_soundfile, have_deepspeed, have_doctr, have_librosa, have_TTS, have_flash_attention_2, \
-    have_diffusers, sanitize_filename, get_gradio_tmp, get_is_gradio_h2oai
+    have_diffusers, sanitize_filename, get_gradio_tmp, get_is_gradio_h2oai, is_gradio_version4
 
 start_faulthandler()
 import_matplotlib()
@@ -89,7 +89,7 @@ import torch
 from transformers import GenerationConfig, AutoModel, TextIteratorStreamer, AutoTokenizer
 
 from prompter import Prompter, inv_prompt_type_to_model_lower, non_hf_types, PromptType, get_prompt, generate_prompt, \
-    openai_gpts, get_vllm_extra_dict, anthropic_gpts, google_gpts, mistralai_gpts, is_vision_model, groq_gpts, \
+    openai_gpts, get_vllm_extra_dict, anthropic_gpts, google_gpts, mistralai_gpts, groq_gpts, \
     gradio_to_llm, history_for_llm, is_gradio_vision_model
 from stopping import get_stopping
 
@@ -299,7 +299,7 @@ def main(
 
         auth: Union[typing.List[typing.Tuple[str, str]], str] = None,
         auth_filename: str = None,
-        auth_access: str = 'open',
+        auth_access: str = 'closed',
         auth_freeze: bool = False,
         auth_message: str = None,
         google_auth: bool = False,
@@ -322,6 +322,7 @@ def main(
         visible_submit_buttons: bool = True,
         visible_side_bar: bool = True,
         visible_doc_track: bool = True,
+
         visible_chat_tab: bool = True,
         visible_doc_selection_tab: bool = True,
         visible_doc_view_tab: bool = True,
@@ -332,10 +333,13 @@ def main(
         visible_tos_tab: bool = False,
         visible_login_tab: bool = True,
         visible_hosts_tab: bool = False,
+        visible_users_database: bool = True,
+        visible_users_management: bool = True,
+
         chat_tables: bool = False,
-        visible_h2ogpt_links: bool = True,
-        visible_h2ogpt_qrcode: bool = True,
-        visible_h2ogpt_logo: bool = True,
+        visible_h2ogpt_links: bool = False,
+        visible_h2ogpt_qrcode: bool = False,
+        visible_h2ogpt_logo: bool = False,
         visible_chatbot_label: bool = True,
         visible_all_prompter_models: bool = False,
         visible_curated_models: bool = True,
@@ -369,7 +373,7 @@ def main(
         eval_prompts_only_seed: int = 1234,
         eval_as_output: bool = False,
 
-        langchain_mode: str = None,
+        langchain_mode: str = 'UserData',
         user_path: str = None,
         langchain_modes: list = [LangChainMode.USER_DATA.value, LangChainMode.MY_DATA.value, LangChainMode.LLM.value,
                                  LangChainMode.DISABLED.value],
@@ -1749,7 +1753,7 @@ def main(
 
     image_audio_loaders_options0, image_audio_loaders_options, \
         pdf_loaders_options0, pdf_loaders_options, \
-        url_loaders_options0, url_loaders_options = lg_to_gr(**locals())
+        url_loaders_options0, url_loaders_options = lg_to_gr(**locals().copy())
     jq_schema0 = jq_schema
     extract_frames0 = extract_frames
     # transcribe
@@ -1813,7 +1817,7 @@ def main(
                             )
 
     git_hash = get_githash()
-    locals_dict = locals()
+    locals_dict = locals().copy()
     locals_print = '\n'.join(['%s: %s' % (k, v) for k, v in locals_dict.items()])
     if verbose:
         print(f"Generating model with params:\n{locals_print}", flush=True)
@@ -1974,7 +1978,7 @@ def main(
                                     migrate_embedding_model,
                                     auto_migrate_db,
                                     embedding_gpu_id=embedding_gpu_id,
-                                    kwargs_make_db=locals(),
+                                    kwargs_make_db=locals().copy(),
                                     verbose=verbose)
             finally:
                 # in case updated embeddings or created new embeddings
@@ -2225,15 +2229,15 @@ def main(
     # run
     if cli:
         from cli import run_cli
-        return run_cli(**get_kwargs(run_cli, **locals()))
+        return run_cli(**get_kwargs(run_cli, **locals().copy()))
     elif not gradio:
         from eval import run_eval
-        return run_eval(**get_kwargs(run_eval, **locals()))
+        return run_eval(**get_kwargs(run_eval, **locals().copy()))
     elif gradio or prepare_offline_level > 0:
         # imported here so don't require gradio to run generate
         from gradio_runner import go_gradio
         # assume gradio needs everything
-        go_gradio(**locals())
+        go_gradio(**locals().copy())
 
 
 def get_config(base_model,
@@ -2470,7 +2474,7 @@ def get_client_from_inference_server(inference_server, base_model=None, raise_co
 
     if base_model and is_gradio_vision_model(base_model):
         from gradio_utils.grclient import GradioClient
-        gr_client = GradioClient(inference_server, check_hash=False, serialize=True, **gradio_auth)
+        gr_client = GradioClient(inference_server, check_hash=False, serialize=is_gradio_version4, **gradio_auth)
         gr_client.setup()
     elif headers is None:
         try:
@@ -3585,7 +3589,7 @@ def get_score_model(score_model: str = None,
         force_t5_type = False
 
         smodel, stokenizer, sdevice = get_model(reward_type=True,
-                                                **get_kwargs(get_model, exclude_names=['reward_type'], **locals()))
+                                                **get_kwargs(get_model, exclude_names=['reward_type'], **locals().copy()))
     else:
         smodel, stokenizer, sdevice = None, None, None
     return smodel, stokenizer, sdevice
@@ -4509,7 +4513,9 @@ def evaluate(
                 where_from = "gr_client for llava"
 
                 # NOTE: llava doesn't handle context or system prompt directly
-                img_file = get_image_file(image_file, image_control, document_choice)
+                img_file = get_image_file(image_file, image_control, document_choice)  # comes out as list
+                img_file = img_file[:llava_num_max]
+                num_prompt_tokens += 1500 * len(img_file)  # estimate for single image
                 llava_kwargs = dict(file=img_file,
                                     llava_model=inference_server,
                                     # prompt=instruction,
@@ -4522,7 +4528,7 @@ def evaluate(
                                     max_new_tokens=max_new_tokens,
                                     client=gr_client if not regenerate_gradio_clients else None,
                                     )
-                if not stream_output:
+                if not stream_output and img_file == 1:
                     from src.vision.utils_vision import get_llava_response
                     response, _ = get_llava_response(**llava_kwargs)
 
@@ -4593,7 +4599,7 @@ def evaluate(
                         gr_prompt_dict = prompt_dict
 
                     # ensure image in correct format
-                    img_file = get_image_file(image_file, image_control, document_choice, convert=True)
+                    img_file = get_image_file(image_file, image_control, document_choice, convert=True)  # comes out as list
 
                     client_kwargs = dict(instruction=gr_prompt if chat_client else '',  # only for chat=True
                                          iinput=gr_iinput,  # only for chat=True
@@ -4689,6 +4695,9 @@ def evaluate(
                         else:
                             res_dict = yield from gr_client.simple_stream(**gr_stream_kwargs)
                         response = res_dict.get('response', '')
+                    # listen to inner gradio
+                    num_prompt_tokens += res_dict.get('save_dict', {}).get('extra_dict', {}).get('num_prompt_tokens', num_prompt_tokens)
+                    prompt = res_dict.get('prompt_raw', prompt)
                 elif hf_client:
                     # quick sanity check to avoid long timeouts, just see if can reach server
                     requests.get(inference_server, timeout=int(os.getenv('REQUEST_TIMEOUT_FAST', '10')))
@@ -5837,13 +5846,6 @@ def get_limited_prompt(instruction,
     if is_gradio_vision_model(base_model):
         use_chat_template = False
 
-    if use_chat_template:
-        context2 = apply_chat_template(instruction, system_prompt, history, tokenizer)
-        iinput = ''
-        context = ''
-    else:
-        context2 = history_to_context_func(history)
-
     context1 = context
     if context1 is None:
         context1 = ''
@@ -5868,10 +5870,6 @@ def get_limited_prompt(instruction,
 
     context1, num_context1_tokens = H2OTextGenerationPipeline.limit_prompt(context1, tokenizer,
                                                                            max_prompt_length=max_input_tokens)
-    context2_trial, num_context2_tokens = H2OTextGenerationPipeline.limit_prompt(context2, tokenizer,
-                                                                                 max_prompt_length=max_input_tokens)
-    if not use_chat_template:
-        context2 = context2_trial
 
     iinput, num_iinput_tokens = H2OTextGenerationPipeline.limit_prompt(iinput, tokenizer,
                                                                        max_prompt_length=max_input_tokens)
@@ -5879,6 +5877,21 @@ def get_limited_prompt(instruction,
     system_prompt, num_system_tokens = H2OTextGenerationPipeline.limit_prompt(system_prompt, tokenizer,
                                                                               max_prompt_length=int(
                                                                                   max_input_tokens * 0.9))
+    if use_chat_template:
+        context2 = apply_chat_template(instruction, system_prompt, history, tokenizer)
+        iinput = ''
+        context1 = ''
+        num_context1_tokens = 0
+    else:
+        context2 = history_to_context_func(history)
+
+    context2_trial, num_context2_tokens = H2OTextGenerationPipeline.limit_prompt(context2, tokenizer,
+                                                                                 max_prompt_length=max_input_tokens)
+    if not use_chat_template:
+        context2 = context2_trial
+    else:
+        num_instruction_tokens = 0
+
     # limit system prompt
     if prompter:
         prompter.system_prompt = system_prompt
@@ -5947,6 +5960,8 @@ def get_limited_prompt(instruction,
                     history_to_use = history[0 + chat_index:]
 
                 if use_chat_template:
+                    instruction, _ = H2OTextGenerationPipeline.limit_prompt(instruction, tokenizer,
+                                                                            max_prompt_length=non_doc_max_length)
                     context2 = apply_chat_template(instruction, system_prompt, history_to_use, tokenizer)
                 else:
                     context2 = history_to_context_func(history_to_use)

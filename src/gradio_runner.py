@@ -622,7 +622,7 @@ def go_gradio(**kwargs):
     
     # BEGIN AUTH THINGS
     
-    def auth_func(username1, password1, auth_pairs=None, auth_filename=None,
+    def auth_func(username1, password1, role1=None, auth_pairs=None, auth_filename=None,
               auth_access=None,
               auth_freeze=None,
               guest_name=None,
@@ -659,16 +659,149 @@ def go_gradio(**kwargs):
                 return False
             # open access
             auth_dict = {
+                'userid': id0 or str(uuid.uuid4()),
                 'username': username1,
                 'password': password1,
-                'userid': id0 or str(uuid.uuid4())
+                'role' : role1
             }
             # Insert new user data into MongoDB
             collection.insert_one(auth_dict)
             # Update authentication selection
             update_auth_selection(auth_dict, selection_docs_state1)
             return True
+    
+    #Récupére les utilisateurs de la base mongo
+    def fetch_users():
+        cursor = collection.find({}, {"_id": 0})  
+        users_df = pd.DataFrame(list(cursor))
+        return users_df
+    
+    #Opérations CRUD :
+    def delete_user(selected_user):
+        try:
+            result = collection.delete_one({"username": selected_user})
+            deleted_count = result.deleted_count
 
+            if deleted_count == 1:
+                text_message = str(selected_user) + " Account has been deleted succesfully !"
+                return text_message  
+            else:
+                text_message2 = str(selected_user) + "No User found with username : " + str(selected_user)
+                return text_message2 
+        except Exception as e:
+            print(f"Error deleting user: {e}")
+            return False 
+    
+    #Création compte (admin)
+    def create_account(username1, password1, role1):
+        existing_user = collection.find_one({'username': username1})
+        if existing_user:
+            return "Please select another username. This username is already taken."
+        
+        else:
+            auth_dict = {
+                    'userid': str(uuid.uuid4()),
+                    'username': username1,
+                    'password': password1,
+                    'role' : role1
+                }
+            collection.insert_one(auth_dict)
+            
+            text_message = str(username1) + "'s account has been created succesfully !" 
+            return text_message
+    
+    #Fonctions d'update dans la gestion des utilisateurs 
+    def update_username(username1, new_username1):
+        collection.update_one({"username": username1}, {"$set": {"username": new_username1}}) 
+
+    def update_password(username1, new_password1):
+        collection.update_one({"username": username1}, {"$set": {"password": new_password1}})
+
+    def update_role(username1, new_role1):
+        collection.update_one({"username": username1}, {"$set": {"role": new_role1}})
+    
+    def update_username_and_password(username, new_username, new_password):
+        collection.update_one({"username": username}, {"$set": {"username": new_username, "password": new_password}})
+
+    def update_username_and_role(username, new_username, new_role):
+        collection.update_one({"username": username}, {"$set": {"username": new_username, "role": new_role}})
+
+    def update_password_and_role(username, new_password, new_role):
+        collection.update_one({"username": username}, {"$set": {"password": new_password, "role": new_role}})
+    
+    def update_all(username, new_username, new_password, new_role):
+        collection.update_one({"username": username}, {"$set": {"username": new_username ,"password": new_password, "role": new_role}})
+    
+    def overall_update_func(old_username, new_username1, new_password1, new_role1):
+        if len(new_username1) > 0 and len(new_password1) > 0 and len(new_role1) > 0:
+            update_all(old_username, new_username1, new_password1, new_role1)
+            return "Data Updated Succesfully ! (Username, Password and Role)"
+        elif len(new_username1) > 0 and len(new_password1) > 0 and len(new_role1) == 0:
+            update_username_and_password(old_username, new_username1, new_password1)
+            return "Data Updated Succesfully ! (Username and Password)"
+        elif len(new_username1) > 0 and len(new_password1) == 0 and len(new_role1) > 0:
+            update_username_and_role(old_username,new_username1, new_role1)
+            return "Data Updated Succesfully ! (Username and Role)"
+        elif len(new_username1) == 0 and len(new_password1) > 0 and len (new_role1) > 0:
+            update_password_and_role(old_username, new_password1, new_role1)
+            return "Data Updated Succesfully ! (Password and Role)"
+        elif len(new_username1) > 0 and len(new_password1) == 0 and len (new_role1) == 0:
+            update_username(old_username, new_username1)
+            return "Data Updated Succesfully ! (Username)"
+        elif len(new_username1) == 0 and len(new_password1) > 0 and len (new_role1) == 0:
+            update_password(old_username, new_password1)
+            return "Data Updated Succesfully ! (Password)"
+        elif len(new_username1) == 0 and len(new_password1) == 0 and len (new_role1) > 0:
+            update_role(old_username, new_role1)
+            return "Data Updated Succesfully ! (Role)"
+        elif len(new_username1)==0 and len(new_password1)==0 and len(new_role1) == 0:
+            return "Invalid input: Please provide at least one field to update."
+
+    #def overall_update_func(old_username, new_username1, new_password1, new_role1):
+    #    if len(new_username1) > 0:
+    #        update_username(old_username, new_username1)
+    #        if len(new_password1) > 0:
+    #            update_password(old_username, new_password1)
+    #    if new_password1:
+    #        update_password(old_username, new_password1)
+    #    if new_role1:
+    #        update_role(old_username, new_role1)
+
+    #    if len(new_username1)==0 and len(new_password1)==0 and len(new_role1) == 0:
+    #       return "Invalid input: Please provide at least one field to update."
+
+        return "Data Updated Successfully!"
+        
+    #fonctions de changements et refresh pour gradio (.change et .click())
+    def update_dropdown_user(x):
+        users = fetch_users()
+        usernames = users["username"].to_list()
+        return gr.Dropdown(choices=usernames, interactive=True)
+        
+    def update_components_user(w,x,y,z,m):
+        users = fetch_users()
+        usernames = users["username"].to_list()
+        w = gr.Dropdown(label="Select User", choices=usernames, value="", allow_custom_value=True)
+        x = gr.Textbox(label="Username (Update)", value="")
+        y = gr.Textbox(label="Password (Update)", value="")
+        z = gr.Dropdown(label="Role (Update)", choices=["User","Admin","Expert"], value="")
+        m = gr.Text(label="Result", interactive=False, value = "")
+        return w,x,y,z,m
+        
+    def update_components_create_acc(x,y,z,m):
+        x = gr.Textbox(label="Username (Creation)", value="")
+        y = gr.Textbox(label="Password (Creation)",value="")
+        z = gr.Dropdown(label="Role (Creation)", choices=["User","Admin","Expert"], value="")
+        m = gr.Text(label="Result", interactive=False, value = "")
+        return x,y,z,m
+
+    def update_components_delete(x,y):
+        users = fetch_users()
+        usernames = users["username"].to_list()
+        x = gr.Dropdown(label="Select User", choices=usernames, value="", allow_custom_value=True)
+        y = gr.Text(label="Result", interactive=False, value = "")
+        return x,y
+    
     def auth_func_open(*args, **kwargs):
         return True
 
@@ -2353,12 +2486,14 @@ def go_gradio(**kwargs):
                         value="#### Login page to persist your state (database, documents, chat, chat history, model list)%s" % extra_login)
                     username_text = gr.Textbox(label="Username")
                     password_text = gr.Textbox(label="Password", type='password', visible=True)
+                    role_text = gr.Dropdown(label= "Role", choices=["User", "Admin", "Expert"])
                     login_msg = "Login (pick unique user/pass to persist your state)" if kwargs[
                                                                                              'auth_access'] == 'open' else "Login (closed access)"
                     login_btn = gr.Button(value=login_msg)
                     num_lock_button = gr.Button(visible=False)
                     num_model_lock_value_output = gr.Number(value=len(text_outputs), visible=False)
                     login_result_text = gr.Text(label="Login Result", interactive=False)
+                    logout_btn = gr.Button("Logout", link="/logout")
                     # WIP
                     if (kwargs['auth'] or kwargs['google_auth']) and is_gradio_h2oai:
                         gr.Button("Logout", link="/logout")
@@ -2384,7 +2519,60 @@ def go_gradio(**kwargs):
                         {description_bottom}
                         {task_info_md}
                         """)
+                user_management_tab = gr.TabItem("Users Database") \
+                    if kwargs['visible_users_database'] else gr.Row(visible=False)
+                with user_management_tab:
+                    user_df = fetch_users()
 
+                    columns = ["userid", "username", "password", "role"]  
+
+                    gr.Markdown(value="### Users Database DataFrame (Reading User information)")
+                    user_table = gr.Dataframe(
+                        user_df[columns]
+                    )
+                    
+                    refresh = gr.Button("Refresh")
+                    refresh.click(lambda: fetch_users()[columns], None, user_table)
+                
+                user_management_tab2 = gr.TabItem("Users Management") \
+                    if kwargs['visible_users_management'] else gr.Row(visible=False)
+                with user_management_tab2:
+                    gr.Markdown(value="### Updating User Informations \n (Please refresh after eaach action)")
+                    user_df = fetch_users() 
+                    selected_user_dropdown = gr.Dropdown(label="Select User", choices=user_df["username"].tolist())
+                    username_update = gr.Textbox(label="Username (Update)")
+                    password_update = gr.Textbox(label="Password (Update)")
+                    role_update = gr.Dropdown(label="Role (Update)", choices=["User","Admin","Expert"])
+                    update_result_text = gr.Text(label="Result", interactive=False)
+                    update_user_btn = gr.Button(value="Save Changes")
+                    refresh = gr.Button("Refresh", size="sm")
+                    refresh.click(fn=update_components_user, inputs=[selected_user_dropdown,username_update,password_update,role_update,update_result_text], outputs=[selected_user_dropdown,username_update,password_update,role_update,update_result_text])
+                    selected_user_dropdown.change(fn=update_dropdown_user, inputs=selected_user_dropdown, outputs=selected_user_dropdown)
+
+                    
+                    gr.Markdown(value="### User Creation \n (Please refresh after eaach action)")
+                    username_creation = gr.Textbox(label="Username (Creation)")
+                    password_creation = gr.Textbox(label="Password (Creation)")
+                    role_creation = gr.Dropdown(label="Role (Creation)", choices=["User","Admin","Expert"])
+                    create_result_text = gr.Text(label="Result", interactive=False)
+                    create_user_btn = gr.Button(value="Create New User")
+                    refresh = gr.Button("Refresh", size="sm")
+                    refresh.click(fn=update_components_create_acc, inputs=[username_creation,password_creation,role_creation,create_result_text], outputs=[username_creation,password_creation,role_creation,create_result_text])
+                    
+                    gr.Markdown(value="### Deleting User \n (Please refresh after eaach action)")
+                    select_user_delete_dropdown = gr.Dropdown(label="Select User", choices=user_df["username"].tolist(), allow_custom_value=True)
+                    delete_result_text = gr.Text(label="Result", interactive=False)                    
+                    delete_user_btn = gr.Button(value="Delete")
+                    select_user_delete_dropdown.change(fn=update_dropdown_user, inputs=select_user_delete_dropdown, outputs=select_user_delete_dropdown)
+                    refresh = gr.Button("Refresh", size="sm")
+                    refresh.click(fn=update_components_delete, inputs=[select_user_delete_dropdown,delete_result_text], outputs=[select_user_delete_dropdown,delete_result_text])
+                    
+            
+        #CRUD Buttons events
+        create_user_btn.click(fn=create_account, inputs=[username_creation,password_creation,role_creation], outputs=create_result_text)
+        delete_user_btn.click(fn=delete_user, inputs=select_user_delete_dropdown, outputs=delete_result_text)
+        update_user_btn.click(fn=overall_update_func, inputs=[selected_user_dropdown,username_update,password_update,role_update], outputs=update_result_text)
+                    
         # Get flagged data
         zip_data1 = functools.partial(zip_data, root_dirs=['flagged_data_points', kwargs['save_dir']])
         zip_event = zip_btn.click(zip_data1, inputs=None, outputs=[file_output, zip_text],
@@ -2889,7 +3077,7 @@ def go_gradio(**kwargs):
                   model_options_state1, lora_options_state1, server_options_state1,
                   chat_state1, langchain_mode1,
                   h2ogpt_key2, visible_models1,
-                  username1, password1,
+                  username1, password1, role1,
                   text_output1, text_output21, *text_outputs1,
                   auth_filename=None, num_model_lock=0, pre_authorized=False):
             # use full auth login to allow new users if open access etc.
@@ -2901,7 +3089,7 @@ def go_gradio(**kwargs):
                 authorized1 = False
 
             # need to store even if pre authorized, so can keep track of state
-            authorized2 = authf(username1, password1, selection_docs_state1=selection_docs_state1,
+            authorized2 = authf(username1, password1,role1, selection_docs_state1=selection_docs_state1,
                                 id0=get_userid_direct(db1s))
             authorized1 += authorized2
 
@@ -2925,7 +3113,7 @@ def go_gradio(**kwargs):
                               h2ogpt_key2=h2ogpt_key2, visible_models1=visible_models1,
                               text_output1=text_output1, text_output21=text_output21,
                               text_outputs1=text_outputs1,
-                              username_override=username1, password_to_check=password1,
+                              username_override=username1, password_to_check=password1, role_to_check=role1,
                               num_model_lock=num_model_lock)
             else:
                 success1 = False
@@ -2971,7 +3159,7 @@ def go_gradio(**kwargs):
                         model_options_state, lora_options_state, server_options_state,
                         chat_state, langchain_mode,
                         h2ogpt_key, visible_models,
-                        username_text, password_text,
+                        username_text, password_text, role_text,
                         text_output, text_output2] + text_outputs
         login_outputs = [my_db_state, selection_docs_state, requests_state, roles_state,
                          model_options_state, lora_options_state, server_options_state,
@@ -3002,7 +3190,7 @@ def go_gradio(**kwargs):
               h2ogpt_key2=None, visible_models1=None,
               text_output1=None, text_output21=None,
               text_outputs1=None,
-              username_override=None, password_to_check=None,
+              username_override=None, password_to_check=None, role_to_check=None,
               num_model_lock=None):
     
             # in-place assignment
