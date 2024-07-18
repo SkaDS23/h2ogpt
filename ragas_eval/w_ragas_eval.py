@@ -4,9 +4,9 @@ from datasets import Dataset
 from ragas.evaluation import evaluate
 from pymongo import MongoClient
 import json
-from ragas.metrics.critique import harmfulness
 from typing import Literal
 from datetime import datetime
+from ragas.metrics.critique import harmfulness
 from ragas.metrics import (
     answer_relevancy,
     faithfulness, 

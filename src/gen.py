@@ -241,8 +241,8 @@ def main(
         max_output_seq_len: int = None,
         offload_folder: str = "offline_folder",
 
-        src_lang: str = "English",
-        tgt_lang: str = "Russian",
+        src_lang: str = None,
+        tgt_lang: str = None,
 
         prepare_offline_level: int = 0,
         cli: bool = False,
@@ -316,6 +316,8 @@ def main(
 
         visible_models: list = None,
         max_visible_models: int = None,
+        
+        user_role: str='',
 
         visible_ask_anything_high: bool = True,
         visible_visible_models: bool = True,
@@ -329,12 +331,13 @@ def main(
         visible_chat_history_tab: bool = True,
         visible_expert_tab: bool = True,
         visible_models_tab: bool = True,
-        visible_system_tab: bool = True,
+        visible_system_tab: bool = False,
         visible_tos_tab: bool = False,
-        visible_login_tab: bool = True,
+        visible_login_tab: bool = False,
         visible_hosts_tab: bool = False,
         visible_users_database: bool = True,
         visible_users_management: bool = True,
+        visible_dashboard: bool = True,
 
         chat_tables: bool = False,
         visible_h2ogpt_links: bool = False,
@@ -401,7 +404,7 @@ def main(
         db_type: str = 'chroma',
         use_openai_embedding: bool = False,
         use_openai_model: bool = False,
-        hf_embedding_model: str = None,
+        hf_embedding_model: str = "sentence-transformers/all-MiniLM-L12-v2",
         migrate_embedding_model: str = False,
         auto_migrate_db: bool = False,
         cut_distance: float = 1.64,

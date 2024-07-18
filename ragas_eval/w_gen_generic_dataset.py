@@ -33,9 +33,9 @@ def main():
                     langchain_mode="UserData",
                     langchain_action = LangChainAction.QUERY.value,
                     top_k_docs=3,
-                    pre_prompt_query=pre_prompt_query,
-                    prompt_query=prompt_query,
-                    system_prompt=system_prompt,
+                    pre_prompt_query=PromptTemplates.PRE_PROMPT_QUERY.value,
+                    prompt_query=PromptTemplates.PROMPT_QUERY.value,
+                    system_prompt=PromptTemplates.SYSTEM_PROMPT.value,
                     document_subset="Relevant",
                     temperature=0.1, 
                     chunk=True,
@@ -43,8 +43,8 @@ def main():
                     )
 
         res = client.predict(str(dict(kwargs)), api_name='/submit_nochat_api')
-        #save_data_db2(prompt=prompt, response=res, ground_truth = ground_truth)
-        save_data_db(prompt=prompt, response=res, ground_truth=ground_truth, model="mistral-7b")
+        model = get_model_name(res)
+        save_data_db(prompt=prompt, response=res, ground_truth=ground_truth, model=model)
         print(f"Question {i} generated successfully")
         i = i+1
     

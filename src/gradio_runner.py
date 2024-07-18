@@ -26,6 +26,9 @@ from src.db_utils import set_userid, get_username_direct, length_db1, get_userid
 from src.tts_utils import combine_audios
 from src.vision.utils_vision import base64_to_img
 
+from ragas_eval.poc_viz import * 
+from ragas_eval.w_eval_utils import *
+
 # This is a hack to prevent Gradio from phoning home when it gets imported
 os.environ['GRADIO_ANALYTICS_ENABLED'] = 'False'
 
@@ -619,7 +622,7 @@ def go_gradio(**kwargs):
     client = MongoClient('mongodb://localhost:27017/')  
     db = client['h2ogpt'] 
     collection = db['Users'] 
-    
+
     # BEGIN AUTH THINGS
     
     def auth_func(username1, password1, role1=None, auth_pairs=None, auth_filename=None,
@@ -628,7 +631,7 @@ def go_gradio(**kwargs):
               guest_name=None,
               selection_docs_state1=None,
               selection_docs_state00=None,
-              id0=None,
+              id0=None, user_role=None,
               **kwargs):
         assert auth_freeze is not None
         if selection_docs_state1 is None:
@@ -636,7 +639,7 @@ def go_gradio(**kwargs):
         assert selection_docs_state1 is not None
         assert auth_filename and isinstance(auth_filename, str), "Auth file must be a non-empty string, got: %s" % str(
             auth_filename)
-        if auth_access == 'open' and username1.startswith(guest_name):
+        if auth_access == 'open' and username1.startswith(str(guest_name)):
             return True
         if username1 == '':
             # some issue with login
@@ -647,6 +650,8 @@ def go_gradio(**kwargs):
         
         if user_data:
             if password1 == user_data['password']:
+                if user_role is not None and user_data['role'] != user_role:
+                    return False 
                 # Update authentication selection
                 update_auth_selection(user_data, selection_docs_state1)
                 # Save user data back to MongoDB
@@ -670,7 +675,6 @@ def go_gradio(**kwargs):
             update_auth_selection(auth_dict, selection_docs_state1)
             return True
     
-    #Récupére les utilisateurs de la base mongo
     def fetch_users():
         cursor = collection.find({}, {"_id": 0})  
         users_df = pd.DataFrame(list(cursor))
@@ -757,19 +761,6 @@ def go_gradio(**kwargs):
         elif len(new_username1)==0 and len(new_password1)==0 and len(new_role1) == 0:
             return "Invalid input: Please provide at least one field to update."
 
-    #def overall_update_func(old_username, new_username1, new_password1, new_role1):
-    #    if len(new_username1) > 0:
-    #        update_username(old_username, new_username1)
-    #        if len(new_password1) > 0:
-    #            update_password(old_username, new_password1)
-    #    if new_password1:
-    #        update_password(old_username, new_password1)
-    #    if new_role1:
-    #        update_role(old_username, new_role1)
-
-    #    if len(new_username1)==0 and len(new_password1)==0 and len(new_role1) == 0:
-    #       return "Invalid input: Please provide at least one field to update."
-
         return "Data Updated Successfully!"
         
     #fonctions de changements et refresh pour gradio (.change et .click())
@@ -852,7 +843,7 @@ def go_gradio(**kwargs):
                               auth_filename=kwargs['auth_filename'],
                               auth_access=kwargs['auth_access'],
                               auth_freeze=kwargs['auth_freeze'],
-                              guest_name=kwargs['guest_name'],
+                              user_role=kwargs['user_role'],
                               selection_docs_state00=copy.deepcopy(selection_docs_state0))
 
     def get_request_state(requests_state1, request, db1s):
@@ -1187,9 +1178,11 @@ def go_gradio(**kwargs):
 
         normal_block = gr.Row(visible=not base_wanted, equal_height=False, elem_id="col_container")
         with normal_block:
-            side_bar = gr.Column(elem_id="sidebar", scale=1, min_width=100, visible=kwargs['visible_side_bar'])
+            side_bar = gr.Column(elem_id="sidebar", scale=1, min_width=100, visible=kwargs['visible_side_bar']) \
+                if kwargs['visible_side_bar'] else gr.Row(visible=False)
             with side_bar:
-                with gr.Accordion("Chats", open=False, visible=True):
+                account_logout_button = gr.Button("Logout", visible=True, link="/logout", size="sm")
+                with gr.Accordion("Chats", open=False, visible=False):
                     radio_chats = gr.Radio(value=None, label="Saved Chats", show_label=False,
                                            visible=True, interactive=True,
                                            type='value')
@@ -1690,7 +1683,7 @@ def go_gradio(**kwargs):
                                                       visible=not is_public and not kwargs['model_lock'],
                                                       interactive=False)
                 expert_tab = gr.TabItem("Expert") \
-                    if kwargs['visible_expert_tab'] else gr.Row(visible=False)
+                    if kwargs['user_role'] == "Expert" else gr.Row(visible=False)
                 with expert_tab:
                     gr.Markdown("Prompt Control")
                     with gr.Row():
@@ -2059,7 +2052,7 @@ def go_gradio(**kwargs):
                                                         api_name='add_role' if allow_api else None,
                                                         **noqueue_kwargs2,
                                                         )
-                models_tab = gr.TabItem("Models") if kwargs['visible_models_tab'] else gr.Row(visible=False)
+                models_tab = gr.TabItem("Models") if kwargs['user_role'] == "Expert" else gr.Row(visible=False)
                 with models_tab:
                     load_msg = "Load (Download) Model" if not is_public \
                         else "LOAD-UNLOAD DISABLED FOR HOSTED DEMO"
@@ -2520,7 +2513,7 @@ def go_gradio(**kwargs):
                         {task_info_md}
                         """)
                 user_management_tab = gr.TabItem("Users Database") \
-                    if kwargs['visible_users_database'] else gr.Row(visible=False)
+                    if kwargs['user_role'] == "Admin" else gr.Row(visible=False)
                 with user_management_tab:
                     user_df = fetch_users()
 
@@ -2535,7 +2528,7 @@ def go_gradio(**kwargs):
                     refresh.click(lambda: fetch_users()[columns], None, user_table)
                 
                 user_management_tab2 = gr.TabItem("Users Management") \
-                    if kwargs['visible_users_management'] else gr.Row(visible=False)
+                    if kwargs['user_role'] == "Admin" else gr.Row(visible=False)
                 with user_management_tab2:
                     gr.Markdown(value="### Updating User Informations \n (Please refresh after eaach action)")
                     user_df = fetch_users() 
@@ -2566,7 +2559,114 @@ def go_gradio(**kwargs):
                     select_user_delete_dropdown.change(fn=update_dropdown_user, inputs=select_user_delete_dropdown, outputs=select_user_delete_dropdown)
                     refresh = gr.Button("Refresh", size="sm")
                     refresh.click(fn=update_components_delete, inputs=[select_user_delete_dropdown,delete_result_text], outputs=[select_user_delete_dropdown,delete_result_text])
+                Evaluation_Dataset = gr.TabItem("RAG Evaluation Dataset") \
+                    if kwargs['user_role'] == "Expert" else gr.Row(visible=False)
+                with Evaluation_Dataset:
+                    gr.Markdown(value="### RAG Evaluation Dataset\n Here is the Pre-evaluation dataset (ensure to generate it first before generating the Evaluation Dataset), You can modify this pre-eval dataset in the (RAG Evaluation Section)")
+                    PreEval_Dataframe = gr.DataFrame(headers=["Questions","Ground Truths"]) 
+                    Display_Data_Eval = gr.Button("Display Data", size="sm")
+                    Clear_data_eval = gr.Button("Clear", size="sm")
+                    Refresh_data_eval = gr.Button("Refresh", size="sm")
+                    Generate_dataset_eval = gr.Button("Generate Evaluation Dataset", size="lg")
+                    Display_Data_Eval.click(fn=fetch_data_eval, inputs=None, outputs=PreEval_Dataframe)
+                    Clear_data_eval.click(fn=clear_data_eval, inputs=None, outputs=PreEval_Dataframe)
+                    Refresh_data_eval.click(fn=fetch_data_eval, inputs=None, outputs=PreEval_Dataframe)
+                    Generate_dataset_result = gr.Text(label="Result", interactive=False)
+                    Generate_dataset_eval.click(fn=gen_eval_dataset, inputs=None, outputs=Generate_dataset_result)
+                Pre_evaluation_dataset = gr.TabItem("RAG Pre-Evaluation Dataset") \
+                    if kwargs['user_role'] == "Expert" else gr.Row(visible=False)
+                with Pre_evaluation_dataset:
+                    gr.Markdown(value="### RAG Evaluation (Ragas)")
+                    gr.Markdown(value="##### Pre Evaluation Dataset Generation")
+                    evaldf = fetch_data_eval2()
+                    gr.Markdown(value="(Updating Ground Truth from database)")
+                    selected_question_dropdown = gr.Dropdown(label="Select Question", choices=evaldf["Question"].tolist())
+                    ground_truth_update = gr.Textbox(label="Ground Truth (Update)")
+                    submit_eval_update = gr.Button(value="Submit", size='sm')
+                    updating_eval_db_result = gr.Text(label="Result", interactive=False) 
+                    submit_eval_update.click(update_gr_eval, inputs=[selected_question_dropdown, ground_truth_update], outputs=[updating_eval_db_result])
+                        
+                    gr.Markdown(value="(Adding data to database)")
+                    question_insert_db = gr.Textbox(label="Question")
+                    ground_truth_insert_db = gr.Textbox(label="Ground Truth")
+                    submit_eval_insert = gr.Button(value="Submit", size='sm')
+                    inserting_eval_db_result = gr.Text(label="Result", interactive=False) 
+                    submit_eval_insert.click(insert_qs_gr_eval, inputs=[question_insert_db, ground_truth_insert_db], outputs=[inserting_eval_db_result])
                     
+                    gr.Markdown(value="(Delete data from database)")
+                    question_insert_db_delete = gr.Dropdown(label="Question", choices=evaldf["Question"].tolist())
+                    submit_eval_insert = gr.Button(value="Submit", size='sm')
+                    deleting_eval_db_result = gr.Text(label="Result", interactive=False) 
+                    submit_eval_insert.click(del_qs_gr_eval, inputs=[question_insert_db_delete], outputs=[deleting_eval_db_result])
+                    
+                Evaluation_Dataset = gr.TabItem("RAG Evaluation Dataset") \
+                    if kwargs['user_role'] == "Expert" else gr.Row(visible=False)
+                with Evaluation_Dataset:
+                    gr.Markdown(value="### RAG Evaluation Dataset\n Here is the Pre-evaluation dataset (ensure to generate it first before generating the Evaluation Dataset), You can modify this pre-eval dataset in the (RAG Evaluation Section)")
+                    PreEval_Dataframe = gr.DataFrame(headers=["Questions","Ground Truths"]) 
+                    Display_Data_Eval = gr.Button("Display Data", size="sm")
+                    Clear_data_eval = gr.Button("Clear", size="sm")
+                    Refresh_data_eval = gr.Button("Refresh", size="sm")
+                    Generate_dataset_eval = gr.Button("Generate Evaluation Dataset", size="lg")
+                    Display_Data_Eval.click(fn=fetch_data_eval, inputs=None, outputs=PreEval_Dataframe)
+                    Clear_data_eval.click(fn=clear_data_eval, inputs=None, outputs=PreEval_Dataframe)
+                    Refresh_data_eval.click(fn=fetch_data_eval, inputs=None, outputs=PreEval_Dataframe)
+                    Generate_dataset_result = gr.Text(label="Result", interactive=False)
+                    Generate_dataset_eval.click(fn=gen_eval_dataset, inputs=None, outputs=Generate_dataset_result)
+                    
+                Evaluation_Pipeline = gr.TabItem("Evaluation") \
+                    if kwargs['user_role'] == "Expert" else gr.Row(visible=False)
+                with Evaluation_Pipeline:        
+                    gr.Markdown(value="##### Evaluation of the RAG using RAGAS module and an open-source model\n Evaluation will be performed with the current model running with ollama (select carefully)") 
+                    
+                    model_name = gr.Dropdown(label="Select Model", choices=["phi3", "mistral-7b", "llama3"])
+                    hf_token = gr.Textbox(label="HuggingFace Token", interactive=True, type="password")  
+                    embedding_model = gr.Textbox(label="Embedding Model", interactive=True)
+                    evaluation_button = gr.Button(value="Evaluate", size="lg")
+                    eval_textbox_result = gr.Text(label="Evaluation Result", interactive=False) 
+                    evaluation_button.click(ragas_eval, inputs=[model_name,embedding_model,hf_token], outputs=[eval_textbox_result])
+                    stop_eval = gr.Button(value="Stop", size="sm")
+                    stop_eval.click()
+                        
+                    gr.Accordion(label = "Evaluation Guide", open=False, visible=True)
+                Dashboard = gr.TabItem("Dashboard") \
+                    if kwargs['user_role'] == "Expert" else gr.Row(visible=False)
+                with Dashboard:
+                    gr.Markdown(value="### Evaluation Dashboard")
+                    models = fetch_model_names_eval()
+                    selected_model_dropdown = gr.Dropdown(label="Select Model to evaluate", choices=models)
+                    submit_viz = gr.Button("Submit", size="sm",)
+                    with gr.Row():
+                        with gr.Column(scale=2):
+                            LinePlot = gr.Plot(visible=True, label="Line Chart")
+                        with gr.Column(scale=2):
+                            BoxPlots = gr.Plot(visible=True, label="Box Plots")
+                    with gr.Row():
+                        with gr.Column(scale=2):
+                            RadarChart = gr.Plot(visible=True, label="Radar Chart")
+                        with gr.Column(scale=2):
+                            BarPlot = gr.Plot(visible=True, label="Bar Plot")
+                    clear_viz = gr.Button("Clear", size="sm")
+                    with gr.Accordion("Database View", open=False, visible=True):
+                        gr.Markdown("##### Please select the model to evaluate before submitting (top of the page)")
+                        Display_Data = gr.Button("Display Data", size="sm")
+                        Metrics = ['faithfulness', 'context_recall', 'context_precision', 'answer_similarity', 'answer_correctness', 'answer_relevancy', 'harmfulness']
+                        Dataframe2 = gr.Dataframe(headers=Metrics)
+                        Display_Data.click(fn=fetch_data_dashboard2, inputs=selected_model_dropdown, outputs=Dataframe2)
+                        Clear_Data = gr.Button("Clear", size="sm")
+                        Clear_Data.click(fn=clear_data, inputs=None, outputs=Dataframe2)
+                    with gr.Accordion("Metrics Documentation", open=False, visible=True):
+                        with gr.Row():
+                            gr.Textbox(label="Faithfulness", value="Measures the factual consistency of the generated answer against the given context.", lines=4)
+                            gr.Textbox(label="Context Precision", value="Evaluates whether all of the ground-truth relevant items present in the contexts are ranked higher or not. Ideally all the relevant chunks must appear at the top ranks.", lines=6)
+                            gr.Textbox(label="Answer Relevancy", value="Focuses on assessing how pertinent the generated answer is to the given prompt. A lower score is assigned to answers that are incomplete or contain redundant information and higher scores indicate better relevancy.",lines=9)
+                            gr.Textbox(label="Context Recall", value=" Measures the extent to which the retrieved context aligns with the annotated answer, treated as the ground truth.", lines=5)
+                            gr.Textbox(label="Answer Similarity", value="Asseses of the semantic resemblance between the generated answer and the ground truth. ", lines=4)
+                            gr.Textbox(label="Answer Correctness", value="Involves gauging the accuracy of the generated answer when compared to the ground truth." , lines=4)
+                            gr.Textbox(label="Answer Harmfulness", value="Measures the harmfulness of the LLM response wether it's toxic or not ranging from 0 to 1", lines=4)
+                    
+                    submit_viz.click(fn=update_plot, inputs=selected_model_dropdown, outputs=[LinePlot,BoxPlots,RadarChart, BarPlot])
+                    clear_viz.click(fn=reset_dashboard, inputs=None, outputs=[LinePlot, BoxPlots, RadarChart, BarPlot])
             
         #CRUD Buttons events
         create_user_btn.click(fn=create_account, inputs=[username_creation,password_creation,role_creation], outputs=create_result_text)
@@ -3466,10 +3566,6 @@ def go_gradio(**kwargs):
                         user_path = None
                     if langchain_mode_type not in [x.value for x in list(LangChainTypes)]:
                         textbox = "Invalid type %s" % langchain_mode_type
-                        valid = False
-                        langchain_mode2 = langchain_mode1
-                    elif langchain_mode_type == LangChainTypes.SHARED.value and username1.startswith(guest_name):
-                        textbox = "Guests cannot add shared collections"
                         valid = False
                         langchain_mode2 = langchain_mode1
                     elif user_path is not None and langchain_mode_type == LangChainTypes.PERSONAL.value:
@@ -6592,7 +6688,7 @@ def go_gradio(**kwargs):
     else:
         demo.launch(share=kwargs['share'],
                     server_name=kwargs['server_name'],
-                    server_port=server_port,
+                    server_port=7861 if kwargs['user_role'] == 'Admin' else 7862 if kwargs['user_role'] == 'Expert' else 7860,
                     show_error=True,
                     favicon_path=favicon_path,
                     prevent_thread_lock=True,
@@ -6646,7 +6742,6 @@ def go_gradio(**kwargs):
             h2ogpt_key=h2ogpt_key1,
             auth=kwargs['auth'],
             auth_access=kwargs['auth_access'],
-            guest_name=kwargs['guest_name'],
             )
 
     if kwargs['block_gradio_exit']:
